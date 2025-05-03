@@ -4,6 +4,6 @@ use tracing::info;
 
 use crate::utils::Collections;
 
-pub fn on_connect(socket: SocketRef, collections: Arc<Collections>) {
+pub fn on_connect(_socket: SocketRef, _collections: Arc<Collections>) {
     info!("Client connected");
 }

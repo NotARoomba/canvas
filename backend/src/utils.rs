@@ -3,29 +3,29 @@ use openrouter_api::{ utils, ChatCompletionRequest, OpenRouterClient, Message };
 use serde_json::json;
 use socketioxide::SocketIo;
 use tracing::info;
-use std::{ collections, env, sync::Arc };
-use crate::types::{ Difficulty, User };
+use std::env;
+use crate::types::Difficulty;
 
 #[derive(Debug, Clone)]
 pub struct Collections {
-    pub users: Collection<User>,
+    // pub users: Collection<User>,
     pub lessons: Collection<Document>,
 }
 
-pub async fn init_database(io: &SocketIo) -> Result<Collections, String> {
+pub async fn init_database(_io: &SocketIo) -> Result<Collections, String> {
     let uri: String = env::var("MONGODB").expect("MONGODB must be set");
     let client = Client::with_uri_str(uri).await.expect("Failed to connect to MongoDB");
     let canva_db = client.database(
         env::var("CANVA_DATABASE").expect("CANVA_DATABASE must be set").as_str()
     );
-    let users = canva_db.collection(
-        env::var("USER_COLLECTION").expect("USER_COLLECTION must be set").as_str()
-    ) as Collection<User>;
+    // let users = canva_db.collection(
+    //     env::var("USER_COLLECTION").expect("USER_COLLECTION must be set").as_str()
+    // ) as Collection<User>;
     let lessons = canva_db.collection(
         env::var("LESSON_COLLECTION").expect("LESSON_COLLECTION must be set").as_str()
     ) as Collection<Document>;
     info!("Connected to MongoDB!");
-    Ok(Collections { users, lessons })
+    Ok(Collections { lessons })
 }
 
 //functions for pipeline
