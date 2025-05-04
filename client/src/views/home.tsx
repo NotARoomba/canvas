@@ -1,5 +1,4 @@
 import { Composer, ComposerRef } from "@/components/composer";
-import { Preview } from "@/components/preview";
 
 import { motion } from "motion/react";
 import { useState, useRef } from "react";
@@ -61,12 +60,6 @@ export default function Home() {
         </motion.h1>
 
         <Composer ref={composerRef} isLoading={isLoading} onSend={handleSend} />
-      </section>
-
-      <section className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 p-4 sm:p-6 md:p-8 w-full max-w-7xl place-items-center">
-        {Array.from({ length: 8 }).map((_, index) => (
-          <Preview key={index} composerRef={composerRef} />
-        ))}
       </section>
     </main>
   );
