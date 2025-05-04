@@ -1,35 +1,35 @@
 import { Link } from "wouter";
-import useSWRSubscription from "swr/subscription";
 import { Button } from "@/components/ui/button";
 import { Info } from "@/components/canvas/info";
 import { io } from "socket.io-client";
 import { useEffect, useState } from "react";
+
 interface CanvasProps {
   id: string;
 }
 
 export interface CanvasData {
-  _id: {
-    $oid: string;
+  _id?: {
+    $oid?: string;
   };
-  prompt: string;
-  difficulty: number;
-  title: string;
-  description: string;
-  outline: {
-    title: string;
-    media_type: "text" | "image";
-    prompt: string;
+  prompt?: string;
+  difficulty?: number;
+  title?: string;
+  description?: string;
+  outline?: {
+    title?: string;
+    media_type?: "text" | "image";
+    prompt?: string;
   }[];
-  steps: {
-    title: string;
-    image: string | null;
-    explanation: string;
-    speech: string;
-    tts: string;
-    references: string[];
+  steps?: {
+    title?: string;
+    image?: string | null;
+    explanation?: string;
+    speech?: string;
+    tts?: string;
+    references?: string[];
   }[];
-  wikipedia_url: string;
+  wikipedia_url?: string;
 }
 
 export function Canvas({ id }: CanvasProps) {
@@ -50,7 +50,10 @@ export function Canvas({ id }: CanvasProps) {
   const [data, setData] = useState<CanvasData | null>(null);
 
   useEffect(() => {
-    const socket = io("ws://localhost:3001/");
+    const socket = io("ws://canvas.notaroomba.dev/");
+    socket.on("request_lesson_data", (data: any) => {
+      console.log("request_lesson_data", data);
+    });
 
     socket.on("update_lesson_data", (data) => {
       console.log("update_lesson_data", data);

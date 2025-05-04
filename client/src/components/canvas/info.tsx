@@ -2,7 +2,7 @@ import { CanvasData } from "@/views/canvas";
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
-import { Area } from "@/components/canvas/area";
+import { Board } from "@/components/canvas/board";
 import {
   Check,
   Loader2,
@@ -51,7 +51,7 @@ export function Info({ lesson }: InfoProps) {
           >
             {isSideOpen ? <SidebarOpen /> : <SidebarClose />}
           </Button>
-          <Area lesson={lesson} />
+          <Board lesson={lesson} />
         </div>
       </div>
 
@@ -82,6 +82,16 @@ export function Info({ lesson }: InfoProps) {
                 </p>
               ) : (
                 <div className="w-72 h-10 bg-gray-200 rounded-lg animate-pulse" />
+              )}
+              {lesson.wikipedia_url && (
+                <a
+                  href={lesson.wikipedia_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-600 hover:text-cyan-500 transition-colors underline"
+                >
+                  Ver en Wikipedia
+                </a>
               )}
             </div>
           </div>
