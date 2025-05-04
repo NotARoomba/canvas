@@ -1,10 +1,8 @@
 import { CanvasData } from "@/views/canvas";
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { Plus, Minus, Grid2X2, Volume2, VolumeX, Play, Pause } from "lucide-react";
+import { ChevronLeft, ChevronRight, Volume2, VolumeX, Play, Pause } from "lucide-react";
 import { Markdown } from "@/components/ui/markdown";
 
 interface BoardProps {
@@ -15,14 +13,8 @@ export function Board({ lesson }: BoardProps) {
   const [currentStep, setCurrentStep] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const hasStartedRef = useRef(false);
-  const transformFunctionsRef = useRef<{
-    resetTransform?: () => void;
-    setTransform?: (x: number, y: number, scale: number, duration?: number) => void;
-  }>({});
 
   const steps = lesson.steps || [];
-  const gridSize = Math.ceil(Math.sqrt(steps.length));
 
   const playAudio = useCallback(async (index: number) => {
     if (index >= 0 && index < steps.length && steps[index].tts) {
@@ -50,30 +42,11 @@ export function Board({ lesson }: BoardProps) {
 
   const handleStepTransition = useCallback((index: number) => {
     setCurrentStep(index);
-
-    if (index === -1) {
-      // Overview: zoom out to see all content
-      transformFunctionsRef.current.resetTransform?.();
-      // Stop audio when going to overview
-      if (audioRef.current) {
-        audioRef.current.pause();
-        setIsPlaying(false);
-      }
-    } else {
-      // Individual step: zoom to specific position
-      const col = index % gridSize;
-      const row = Math.floor(index / gridSize);
-      const centerX = (col + 0.5) * 800;
-      const centerY = (row + 0.5) * 800;
-
-      transformFunctionsRef.current.setTransform?.(
-        window.innerWidth / 2 - centerX,
-        window.innerHeight / 2 - centerY,
-        1.2,
-        600
-      );
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
     }
-  }, [gridSize]);
+  }, []);
 
   const toggleAudio = useCallback(() => {
     if (isPlaying && audioRef.current) {
@@ -90,247 +63,169 @@ export function Board({ lesson }: BoardProps) {
     playAudio(startIndex);
   }, [currentStep, handleStepTransition, playAudio]);
 
-  useEffect(() => {
-    if (steps.length > 0 && !hasStartedRef.current) {
-      hasStartedRef.current = true;
-      handleStepTransition(0);
-      playAudio(0);
-    }
-  }, [steps.length, handleStepTransition, playAudio]);
-
   if (!steps.length) {
     return <div>Cargando...</div>;
   }
 
   return (
-    <div className="w-full h-full bg-background rounded-lg overflow-hidden">
-      <TransformWrapper
-        initialScale={0.4}
-        minScale={0.2}
-        maxScale={2}
-        centerOnInit
-        limitToBounds={true}
-        panning={{ disabled: false, velocityDisabled: false }}
-        pinch={{ disabled: false }}
-        doubleClick={{ disabled: true }}
-        wheel={{
-          step: 0.1,
-          smoothStep: 0.002,
-          wheelDisabled: false,
-        }}
-        velocityAnimation={{
-          sensitivity: 0.8,
-          animationTime: 300,
-          equalToMove: true,
-        }}
-        alignmentAnimation={{
-          disabled: true,
-        }}
-        centerZoomedOut={true}
-      >
-        {({ zoomIn, zoomOut, resetTransform, setTransform }) => {
-          // Store transform functions in ref for use outside this scope
-          transformFunctionsRef.current = { resetTransform, setTransform };
-
-          return (
-            <>
-              <TransformComponent wrapperClass="!w-full !h-full" contentClass="!w-full !h-full">
-                <div
-                  className="relative bg-gradient-to-br from-background to-muted/20"
-                  style={{
-                    width: `${gridSize * 800}px`,
-                    height: `${gridSize * 800}px`,
-                    display: "grid",
-                    gridTemplateColumns: `repeat(${gridSize}, 1fr)`,
-                    gap: "60px",
-                    padding: "300px 120px 120px",
-                  }}
-                >
-                  {/* Grid background */}
-                  <div
-                    className="absolute inset-0 grid"
-                    style={{
-                      backgroundImage: `
-                        linear-gradient(to right, var(--border) 1px, transparent 1px),
-                        linear-gradient(to bottom, var(--border) 1px, transparent 1px)
-                      `,
-                      backgroundSize: "100px 100px",
-                      opacity: 0.1,
-                    }}
-                  />
-
-                  {/* Title and Description - spans full grid width */}
-                  <div
-                    className="absolute left-1/2 -translate-x-1/2 text-center"
-                    style={{
-                      width: `${gridSize * 600}px`,
-                      top: "60px",
-                    }}
-                  >
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-6xl font-bold mb-12 text-foreground"
-                    >
-                      <Markdown>{lesson.title || ""}</Markdown>
-                    </motion.div>
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-2xl text-muted-foreground max-w-3xl mx-auto mb-24"
-                    >
-                      <Markdown>{lesson.description || ""}</Markdown>
-                    </motion.div>
+    <div className="w-full h-full bg-background relative overflow-hidden">
+      {/* Title Slide */}
+      <AnimatePresence mode="wait">
+        {currentStep === -1 ? (
+          <motion.div
+            key="title"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 flex flex-col items-center justify-center p-12 text-center bg-gradient-to-br from-background to-muted/20"
+          >
+            <h1 className="text-7xl font-bold mb-8 bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/50">
+              <Markdown>{lesson.title || ""}</Markdown>
+            </h1>
+            <p className="text-3xl text-muted-foreground max-w-4xl">
+              <Markdown>{lesson.description || ""}</Markdown>
+            </p>
+            <Button 
+              size="lg" 
+              className="mt-12"
+              onClick={() => {
+                handleStepTransition(0);
+              }}
+            >
+              Comenzar
+              <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="content"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            <div className="w-full max-w-7xl h-full p-12">
+              <div className="relative w-full h-full bg-card rounded-xl shadow-lg overflow-hidden">
+                {/* Step content */}
+                <div className="absolute inset-0 p-8 flex flex-col">
+                  {/* Header */}
+                  <div className="flex items-center gap-4 mb-8">
+                    <div className="bg-primary/10 text-primary rounded-full w-12 h-12 flex items-center justify-center text-xl font-medium">
+                      {currentStep + 1}
+                    </div>
+                    <h2 className="text-4xl font-bold text-foreground">
+                      <Markdown>{steps[currentStep]?.title || ""}</Markdown>
+                    </h2>
                   </div>
 
-                  <AnimatePresence>
-                    {steps.map((step, index) => (
-                      <motion.div
-                        key={index}
-                        initial={{ opacity: 0, scale: 0 }}
-                        animate={{
-                          opacity: 1,
-                          scale: 1,
-                        }}
-                        className={cn(
-                          "w-full h-full p-6 transition-all duration-300",
-                          currentStep === index
-                            ? "scale-105 z-10"
-                            : currentStep === -1
-                            ? "scale-100 hover:scale-102"
-                            : "scale-95 opacity-50"
-                        )}
-                        onClick={() =>
-                          handleStepTransition(currentStep === -1 ? index : -1)
-                        }
-                      >
-                        <div
-                          className={cn(
-                            "bg-background/50 backdrop-blur-sm rounded-xl p-8 h-full transition-all duration-300",
-                            currentStep === -1
-                              ? "hover:shadow-lg hover:bg-background/70"
-                              : ""
-                          )}
-                        >
-                          <div className="flex items-center gap-3 mb-6">
-                            <div className="bg-primary/10 text-primary rounded-full w-10 h-10 flex items-center justify-center text-lg font-medium">
-                              {index + 1}
-                            </div>
-                            <div className="text-2xl font-bold text-foreground">
-                              <Markdown>{step.title || ""}</Markdown>
-                            </div>
-                          </div>
-                          {step.image && (
-                            <img
-                              src={`https://canvas.notaroomba.dev/images/${step.image}`}
-                              alt={step.title || "Step illustration"}
-                              className="w-full aspect-video object-cover rounded-xl mb-6 shadow-xs"
-                            />
-                          )}
-                          <div
-                            className={cn(
-                              "text-muted-foreground leading-relaxed text-lg prose prose-neutral dark:prose-invert",
-                              currentStep === -1 ? "line-clamp-2" : ""
-                            )}
-                          >
-                            <Markdown>{step.explanation || ""}</Markdown>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </div>
-              </TransformComponent>
-
-              <div className="absolute bottom-8 left-0 right-0 px-8 flex justify-between items-center z-50">
-                <div className="flex gap-4">
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={() => {
-                      const newStep = currentStep - 1;
-                      handleStepTransition(newStep);
-                      if (newStep >= 0) {
-                        playAudio(newStep);
-                      }
-                    }}
-                    disabled={currentStep === -1}
-                  >
-                    Anterior
-                  </Button>
-                  <Button
-                    size="lg"
-                    onClick={() => {
-                      const newStep = currentStep + 1;
-                      if (newStep < steps.length) {
-                        handleStepTransition(newStep);
-                        playAudio(newStep);
-                      }
-                    }}
-                    disabled={currentStep === steps.length - 1}
-                  >
-                    Siguiente
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={() => handleStepTransition(-1)}
-                    className="gap-2"
-                  >
-                    <Grid2X2 className="h-4 w-4" />
-                    Vista general
-                  </Button>
-                  <Button
-                    variant={isPlaying ? "default" : "outline"}
-                    size="lg"
-                    onClick={startPlayback}
-                    className="gap-2"
-                  >
-                    {isPlaying ? (
-                      <Pause className="h-4 w-4" />
-                    ) : (
-                      <Play className="h-4 w-4" />
+                  {/* Content */}
+                  <div className="flex-1 flex flex-col gap-8">
+                    {steps[currentStep]?.image && (
+                      <div className="relative aspect-video rounded-lg overflow-hidden bg-muted">
+                        <img
+                          src={`https://canvas.notaroomba.dev/images/${steps[currentStep].image}`}
+                          alt={steps[currentStep].title || "Step illustration"}
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                      </div>
                     )}
-                    {isPlaying ? "Pausar" : "Reproducir todo"}
-                  </Button>
-                  {currentStep >= 0 && steps[currentStep].tts && (
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      onClick={toggleAudio}
-                      className="gap-2"
-                    >
-                      {isPlaying ? (
-                        <VolumeX className="h-4 w-4" />
-                      ) : (
-                        <Volume2 className="h-4 w-4" />
-                      )}
-                      {isPlaying ? "Pausar audio" : "Reproducir audio"}
-                    </Button>
-                  )}
-                </div>
+                    <div className="prose prose-lg prose-neutral dark:prose-invert max-w-none">
+                      <Markdown>{steps[currentStep]?.explanation || ""}</Markdown>
+                    </div>
 
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => zoomOut()}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => zoomIn()}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
+                    {/* References */}
+                    {steps[currentStep]?.references && steps[currentStep].references.length > 0 && (
+                      <div className="mt-auto pt-8 border-t">
+                        <h3 className="text-sm font-medium text-muted-foreground mb-2">Referencias</h3>
+                        <div className="flex flex-col gap-1.5">
+                          {steps[currentStep].references.map((ref, index) => (
+                            <div
+                              key={index}
+                              className="text-sm text-muted-foreground font-mono"
+                            >
+                              {ref}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </>
-          );
-        }}
-      </TransformWrapper>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Navigation Controls */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 z-50">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => {
+            const newStep = currentStep - 1;
+            if (newStep >= -1) {
+              handleStepTransition(newStep);
+              if (newStep >= 0) playAudio(newStep);
+            }
+          }}
+          disabled={currentStep <= -1}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+
+        {currentStep >= 0 && (
+          <div className="bg-background/80 backdrop-blur-sm px-3 py-1.5 rounded-full text-sm text-muted-foreground">
+            {currentStep + 1} / {steps.length}
+          </div>
+        )}
+
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => {
+            const newStep = currentStep + 1;
+            if (newStep < steps.length) {
+              handleStepTransition(newStep);
+              playAudio(newStep);
+            }
+          }}
+          disabled={currentStep >= steps.length - 1}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+
+        {currentStep >= 0 && (
+          <>
+            <div className="w-px h-6 bg-border mx-2" />
+            <Button
+              variant={isPlaying ? "default" : "outline"}
+              size="icon"
+              onClick={startPlayback}
+            >
+              {isPlaying ? (
+                <Pause className="h-4 w-4" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+            </Button>
+
+            {steps[currentStep].tts && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={toggleAudio}
+              >
+                {isPlaying ? (
+                  <VolumeX className="h-4 w-4" />
+                ) : (
+                  <Volume2 className="h-4 w-4" />
+                )}
+              </Button>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

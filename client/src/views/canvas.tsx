@@ -1,8 +1,4 @@
-import { Link } from "wouter";
-import { Button } from "@/components/ui/button";
 import { Info } from "@/components/canvas/info";
-import { io } from "socket.io-client";
-import { useEffect, useState } from "react";
 
 import { fetcher } from "@/lib/fetcher";
 import useSWR from "swr";
@@ -36,13 +32,13 @@ export interface CanvasData {
 }
 
 export function Canvas({ id }: CanvasProps) {
-   const { data, error } = useSWR<{ lesson: CanvasData }>(
+  const { data } = useSWR<{ lesson: CanvasData }>(
     `https://canvas.notaroomba.dev/lessons/${id}`,
     fetcher,
     {
-       refreshInterval: 2 * 1000,
-     }
-   );
+      refreshInterval: 2 * 1000,
+    }
+  );
 
   // const { data, error } = useSWRSubscription<{ lesson: CanvasData }>(
   //   "ws://localhost:3001/",
@@ -79,22 +75,6 @@ export function Canvas({ id }: CanvasProps) {
     return (
       <div className="flex h-screen w-screen items-center justify-center p-4">
         <div className="h-full w-full animate-pulse rounded-2xl bg-gray-200/80" />
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center p-4">
-        <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-white rounded-2xl p-4">
-          <h1 className="text-2xl font-bold">No pudimos cargar este canvas</h1>
-          <p className="text-gray-600">
-            {"Hubo un error al cargar el canvas. Por favor, intenta de nuevo."}
-          </p>
-          <Link href="/" asChild>
-            <Button>Volver al inicio</Button>
-          </Link>
-        </div>
       </div>
     );
   }
