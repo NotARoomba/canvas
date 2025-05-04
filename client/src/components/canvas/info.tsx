@@ -35,8 +35,8 @@ export function Info({ lesson }: InfoProps) {
   };
 
   function getItemStatus(index: number) {
-    if (index <= lastProcessedStep) return "completed";
-    if (index === lastProcessedStep + 1) return "current";
+    if (index < lastProcessedStep) return "completed";
+    if (index === lastProcessedStep) return "current";
 
     return "pending";
   }

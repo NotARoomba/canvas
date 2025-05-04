@@ -1,8 +1,7 @@
-import { Link } from "wouter";
-import { Button } from "@/components/ui/button";
 import { Info } from "@/components/canvas/info";
-import { io } from "socket.io-client";
-import { useEffect, useState } from "react";
+
+import { fetcher } from "@/lib/fetcher";
+import useSWR from "swr";
 
 interface CanvasProps {
   id: string;
@@ -33,13 +32,13 @@ export interface CanvasData {
 }
 
 export function Canvas({ id }: CanvasProps) {
-  // const { data, error } = useSWR<{ lesson: CanvasData }>(
-  //   `https://canvas.notaroomba.dev/lessons/${id}`,
-  //   fetcher,
-  //   {
-  //     refreshInterval: 2 * 1000,
-  //   }
-  // );
+  const { data } = useSWR<{ lesson: CanvasData }>(
+    `https://canvas.notaroomba.dev/lessons/${id}`,
+    fetcher,
+    {
+      refreshInterval: 2 * 1000,
+    }
+  );
 
   // const { data, error } = useSWRSubscription<{ lesson: CanvasData }>(
   //   "ws://localhost:3001/",
@@ -47,6 +46,7 @@ export function Canvas({ id }: CanvasProps) {
 
   //   }
   // );
+  /**
   const [data, setData] = useState<CanvasData | null>(null);
 
   useEffect(() => {
@@ -59,6 +59,7 @@ export function Canvas({ id }: CanvasProps) {
       console.log("update_lesson_data", data);
       if (!data)
         socket.emit("request_lesson_data", id, (res: any) => {
+          alert("request_lesson_data");
           setData(res);
         });
       else {
@@ -68,7 +69,7 @@ export function Canvas({ id }: CanvasProps) {
     return () => {
       socket.close();
     };
-  }, [data]);
+  }, [data]); */
 
   if (!data) {
     return (
@@ -78,21 +79,5 @@ export function Canvas({ id }: CanvasProps) {
     );
   }
 
-  if (!data) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center p-4">
-        <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-white rounded-2xl p-4">
-          <h1 className="text-2xl font-bold">No pudimos cargar este canvas</h1>
-          <p className="text-gray-600">
-            {"Hubo un error al cargar el canvas. Por favor, intenta de nuevo."}
-          </p>
-          <Link href="/" asChild>
-            <Button>Volver al inicio</Button>
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  return <Info lesson={data} />;
+  return <Info lesson={data.lesson} />;
 }

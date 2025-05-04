@@ -1,276 +1,231 @@
 import { CanvasData } from "@/views/canvas";
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
-import { useEffect, useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { Plus, Minus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Volume2, VolumeX, Play, Pause } from "lucide-react";
 import { Markdown } from "@/components/ui/markdown";
 
 interface BoardProps {
   lesson: CanvasData;
 }
 
-interface StepPosition {
-  x: number;
-  y: number;
-}
-
 export function Board({ lesson }: BoardProps) {
-  const [currentStep, setCurrentStep] = useState(0);
-  const [positions, setPositions] = useState<StepPosition[]>([]);
-  const [boundarySize, setBoundarySize] = useState({ width: 2000, height: 2000 });
+  const [currentStep, setCurrentStep] = useState(-1);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  useEffect(() => {
-    if (lesson.steps) {
-      const GRID_SIZE = Math.ceil(Math.sqrt(lesson.steps.length));
-      const CELL_SIZE = 500;
-      const GRID_OFFSET = (GRID_SIZE - 1) * CELL_SIZE / 2;
+  const steps = lesson.steps || [];
 
-      // Calculate boundary size based on grid
-      const newBoundarySize = {
-        width: (GRID_SIZE * CELL_SIZE) + 400, // Extra padding for title
-        height: (GRID_SIZE * CELL_SIZE) + 400,
-      };
-      setBoundarySize(newBoundarySize);
-
-      const newPositions = lesson.steps.map((_, index) => {
-        const row = Math.floor(index / GRID_SIZE);
-        const col = index % GRID_SIZE;
-        return {
-          x: (col * CELL_SIZE) - GRID_OFFSET,
-          y: (row * CELL_SIZE) - GRID_OFFSET,
-        };
+  const playAudio = useCallback(async (index: number) => {
+    if (index >= 0 && index < steps.length && steps[index].tts) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      
+      const audio = new Audio(`https://canvas.notaroomba.dev/tts/${steps[index].tts}`);
+      audioRef.current = audio;
+      
+      audio.addEventListener('ended', () => {
+        setIsPlaying(false);
+        // Move to next step when audio ends
+        if (index < steps.length - 1) {
+          const nextStep = index + 1;
+          handleStepTransition(nextStep);
+          playAudio(nextStep);
+        }
       });
-      setPositions(newPositions);
-    }
-  }, [lesson.steps]);
 
-  if (!lesson.steps || !positions.length) {
+      setIsPlaying(true);
+      await audio.play();
+    }
+  }, [steps]);
+
+  const handleStepTransition = useCallback((index: number) => {
+    setCurrentStep(index);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    }
+  }, []);
+
+  const toggleAudio = useCallback(() => {
+    if (isPlaying && audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else if (currentStep >= 0) {
+      playAudio(currentStep);
+    }
+  }, [isPlaying, currentStep, playAudio]);
+
+  const startPlayback = useCallback(() => {
+    const startIndex = currentStep === -1 ? 0 : currentStep;
+    handleStepTransition(startIndex);
+    playAudio(startIndex);
+  }, [currentStep, handleStepTransition, playAudio]);
+
+  if (!steps.length) {
     return <div>Cargando...</div>;
   }
 
   return (
-    <div className="w-full h-full bg-background rounded-lg overflow-hidden">
-      <TransformWrapper
-        initialScale={0.8}
-        initialPositionX={50}
-        initialPositionY={50}
-        minScale={0.2}
-        maxScale={8}
-        centerOnInit
-        limitToBounds={false}
-        panning={{ disabled: false, velocityDisabled: false }}
-        pinch={{ disabled: false }}
-        doubleClick={{ disabled: true }}
-        wheel={{ 
-          step: 0.2,
-          smoothStep: 0.005,
-          wheelDisabled: false 
-        }}
-        velocityAnimation={{
-          sensitivity: 1,
-          animationTime: 200,
-          equalToMove: true
-        }}
-        alignmentAnimation={{
-          disabled: true
-        }}
-      >
-        {({ setTransform, zoomIn, zoomOut, instance }) => (
-          <>
-            <TransformComponent
-              wrapperClass="!w-full !h-full"
-              contentClass="!w-full !h-full"
+    <div className="w-full h-full bg-background relative overflow-hidden">
+      {/* Title Slide */}
+      <AnimatePresence mode="wait">
+        {currentStep === -1 ? (
+          <motion.div
+            key="title"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 flex flex-col items-center justify-center p-12 text-center bg-gradient-to-br from-background to-muted/20"
+          >
+            <h1 className="text-7xl font-bold mb-8 bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/50">
+              <Markdown>{lesson.title || ""}</Markdown>
+            </h1>
+            <p className="text-3xl text-muted-foreground max-w-4xl">
+              <Markdown>{lesson.description || ""}</Markdown>
+            </p>
+            <Button 
+              size="lg" 
+              className="mt-12"
+              onClick={() => {
+                handleStepTransition(0);
+              }}
             >
-              <div 
-                className="relative bg-gradient-to-br from-background to-muted/20"
-                style={{ 
-                  width: boundarySize.width,
-                  height: boundarySize.height,
-                }}
-              >
-                {/* Grid background */}
-                <div 
-                  className="absolute inset-0 grid"
-                  style={{
-                    backgroundImage: `
-                      linear-gradient(to right, var(--border) 1px, transparent 1px),
-                      linear-gradient(to bottom, var(--border) 1px, transparent 1px)
-                    `,
-                    backgroundSize: '100px 100px',
-                    opacity: 0.1,
-                  }}
-                />
+              Comenzar
+              <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="content"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            <div className="w-full max-w-7xl h-full p-12">
+              <div className="relative w-full h-full bg-card rounded-xl shadow-lg overflow-hidden">
+                {/* Step content */}
+                <div className="absolute inset-0 p-8 flex flex-col">
+                  {/* Header */}
+                  <div className="flex items-center gap-4 mb-8">
+                    <div className="bg-primary/10 text-primary rounded-full w-12 h-12 flex items-center justify-center text-xl font-medium">
+                      {currentStep + 1}
+                    </div>
+                    <h2 className="text-4xl font-bold text-foreground">
+                      <Markdown>{steps[currentStep]?.title || ""}</Markdown>
+                    </h2>
+                  </div>
 
-                {/* Boundary indicator */}
-                <div className="absolute inset-4 border border-dashed border-primary/20 rounded-xl" />
+                  {/* Content */}
+                  <div className="flex-1 flex flex-col gap-8">
+                    {steps[currentStep]?.image && (
+                      <div className="relative aspect-video rounded-lg overflow-hidden bg-muted">
+                        <img
+                          src={`https://canvas.notaroomba.dev/images/${steps[currentStep].image}`}
+                          alt={steps[currentStep].title || "Step illustration"}
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+                    <div className="prose prose-lg prose-neutral dark:prose-invert max-w-none">
+                      <Markdown>{steps[currentStep]?.explanation || ""}</Markdown>
+                    </div>
 
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-5xl font-bold mb-6 text-foreground"
-                  >
-                    <Markdown>{lesson.title || ''}</Markdown>
-                  </motion.div>
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-2xl text-muted-foreground max-w-2xl"
-                  >
-                    <Markdown>{lesson.description || ''}</Markdown>
-                  </motion.div>
-                </div>
-
-                <AnimatePresence>
-                  {(lesson.steps || []).map((step, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, scale: 0 }}
-                      animate={{
-                        opacity: 1,
-                        scale: 1,
-                      }}
-                      className="absolute"
-                      style={{
-                        left: `calc(50% + ${positions[index].x}px)`,
-                        top: `calc(50% + ${positions[index].y}px)`,
-                        transform: 'translate(-50%, -50%)',
-                      }}
-                    >
-                      <div
-                        className={cn(
-                          "w-[400px] transition-all",
-                          currentStep === index
-                            ? "scale-110"
-                            : "hover:scale-105"
-                        )}
-                        onClick={() => {
-                          setCurrentStep(index);
-                          const centerX = window.innerWidth / 2;
-                          const centerY = window.innerHeight / 2;
-                          const targetX = positions[index].x;
-                          const targetY = positions[index].y;
-                          
-                          setTransform(
-                            centerX - targetX,
-                            centerY - targetY,
-                            1.5,
-                            600
-                          );
-                        }}
-                      >
-                        <div className="flex items-center gap-2 mb-3">
-                          <div className="bg-primary/10 text-primary rounded-full w-8 h-8 flex items-center justify-center font-medium">
-                            {index + 1}
-                          </div>
-                          <div className="text-2xl font-bold text-foreground">
-                            <Markdown>{step.title || ''}</Markdown>
-                          </div>
-                        </div>
-                        {step.image && (
-                          <img
-                            src={`https://canvas.notaroomba.dev/images/${step.image}`}
-                            alt={step.title || "Step illustration"}
-                            className="w-full aspect-video object-cover rounded-xl mb-4 shadow-xs"
-                          />
-                        )}
-                        <div className="text-muted-foreground leading-relaxed text-lg prose prose-neutral dark:prose-invert">
-                          <Markdown>{step.explanation || ''}</Markdown>
+                    {/* References */}
+                    {steps[currentStep]?.references && steps[currentStep].references.length > 0 && (
+                      <div className="mt-auto pt-8 border-t">
+                        <h3 className="text-sm font-medium text-muted-foreground mb-2">Referencias</h3>
+                        <div className="flex flex-col gap-1.5">
+                          {steps[currentStep].references.map((ref, index) => (
+                            <div
+                              key={index}
+                              className="text-sm text-muted-foreground font-mono"
+                            >
+                              {ref}
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-
-                {/* Corner indicators */}
-                <div className="absolute top-6 left-6 text-xs text-muted-foreground font-mono">
-                  ({-boundarySize.width/2}, {-boundarySize.height/2})
+                    )}
+                  </div>
                 </div>
-                <div className="absolute top-6 right-6 text-xs text-muted-foreground font-mono">
-                  ({boundarySize.width/2}, {-boundarySize.height/2})
-                </div>
-                <div className="absolute bottom-6 left-6 text-xs text-muted-foreground font-mono">
-                  ({-boundarySize.width/2}, {boundarySize.height/2})
-                </div>
-                <div className="absolute bottom-6 right-6 text-xs text-muted-foreground font-mono">
-                  ({boundarySize.width/2}, {boundarySize.height/2})
-                </div>
-              </div>
-            </TransformComponent>
-
-            <div className="absolute bottom-8 left-0 right-0 px-8 flex justify-between items-center z-50">
-              <div className="flex gap-4">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={() => {
-                    const newStep = currentStep - 1;
-                    if (newStep >= 0) {
-                      setCurrentStep(newStep);
-                      const centerX = window.innerWidth / 2;
-                      const centerY = window.innerHeight / 2;
-                      const targetX = positions[newStep].x;
-                      const targetY = positions[newStep].y;
-
-                      setTransform(
-                        centerX - targetX,
-                        centerY - targetY,
-                        1.5,
-                        600
-                      );
-                    }
-                  }}
-                  disabled={currentStep === 0}
-                >
-                  Anterior
-                </Button>
-                <Button
-                  size="lg"
-                  onClick={() => {
-                    const newStep = currentStep + 1;
-                    if (lesson.steps && newStep < lesson.steps.length) {
-                      setCurrentStep(newStep);
-                      const centerX = window.innerWidth / 2;
-                      const centerY = window.innerHeight / 2;
-                      const targetX = positions[newStep].x;
-                      const targetY = positions[newStep].y;
-
-                      setTransform(
-                        centerX - targetX,
-                        centerY - targetY,
-                        1.5,
-                        600
-                      );
-                    }
-                  }}
-                  disabled={currentStep === (lesson.steps?.length ?? 0) - 1}
-                >
-                  Siguiente
-                </Button>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => zoomOut()}
-                >
-                  <Minus className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => zoomIn()}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Navigation Controls */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 z-50">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => {
+            const newStep = currentStep - 1;
+            if (newStep >= -1) {
+              handleStepTransition(newStep);
+              if (newStep >= 0) playAudio(newStep);
+            }
+          }}
+          disabled={currentStep <= -1}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+
+        {currentStep >= 0 && (
+          <div className="bg-background/80 backdrop-blur-sm px-3 py-1.5 rounded-full text-sm text-muted-foreground">
+            {currentStep + 1} / {steps.length}
+          </div>
+        )}
+
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => {
+            const newStep = currentStep + 1;
+            if (newStep < steps.length) {
+              handleStepTransition(newStep);
+              playAudio(newStep);
+            }
+          }}
+          disabled={currentStep >= steps.length - 1}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+
+        {currentStep >= 0 && (
+          <>
+            <div className="w-px h-6 bg-border mx-2" />
+            <Button
+              variant={isPlaying ? "default" : "outline"}
+              size="icon"
+              onClick={startPlayback}
+            >
+              {isPlaying ? (
+                <Pause className="h-4 w-4" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+            </Button>
+
+            {steps[currentStep].tts && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={toggleAudio}
+              >
+                {isPlaying ? (
+                  <VolumeX className="h-4 w-4" />
+                ) : (
+                  <Volume2 className="h-4 w-4" />
+                )}
+              </Button>
+            )}
           </>
         )}
-      </TransformWrapper>
+      </div>
     </div>
   );
 }
