@@ -32,7 +32,7 @@ pub async fn get_gallery(Path(count): Path<String>, collections: &Collections) -
 pub fn get_routes(collections: Arc<Collections>) -> Router {
     Router::new()
         .route(
-            "/gallery/68/section/c/wall/3/painting/37/xpos/765432/ypos/83674362/zpos/00023123/molecule/82643/atom/2/quark/4/string/{count}",
+            "/gallery/{count}",
             get({
                 let collections = Arc::clone(&collections);
                 move |params| async move { get_gallery(params, &*collections).await }
