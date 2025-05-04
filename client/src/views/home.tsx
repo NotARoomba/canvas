@@ -56,7 +56,7 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
         >
-          ¿Que quieres aprender hoy?
+          ¿Qué quieres aprender hoy?
         </motion.h1>
 
         <Composer ref={composerRef} isLoading={isLoading} onSend={handleSend} />
