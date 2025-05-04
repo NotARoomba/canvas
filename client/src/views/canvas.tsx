@@ -12,19 +12,24 @@ export interface CanvasData {
   _id: {
     $oid: string;
   };
-  title?: string;
-  description?: string;
-  difficulty?: 0 | 1 | 2;
-  outline?: {
-    title?: string;
-    media_type?: "text";
-    prompt?: string;
+  prompt: string;
+  difficulty: number;
+  title: string;
+  description: string;
+  outline: {
+    title: string;
+    media_type: "text" | "image";
+    prompt: string;
   }[];
-  steps?: {
-    title?: string;
-    image?: string;
-    explanation?: string;
+  steps: {
+    title: string;
+    image: string | null;
+    explanation: string;
+    speech: string;
+    tts: string;
+    references: string[];
   }[];
+  wikipedia_url: string;
 }
 
 export function Canvas({ id }: CanvasProps) {

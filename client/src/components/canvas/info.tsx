@@ -26,7 +26,7 @@ export function Info({ lesson }: InfoProps) {
   const [isSideOpen, setIsSideOpen] = useState(true);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
 
-  const lastProcessedStep = (lesson.steps?.length ?? 0) - 1;
+  const lastProcessedStep = lesson.steps?.length ? lesson.steps.length : -1;
 
   const handleItemClick = (title: string | undefined) => {
     if (title) {
@@ -43,10 +43,10 @@ export function Info({ lesson }: InfoProps) {
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
-      <div className="flex-1 p-4 overflow-auto">
-        <div className="bg-white rounded-lg p-4 min-h-full relative">
+      <div className="flex-1 p-4 overflow-hidden">
+        <div className="bg-white rounded-lg p-4 h-full relative">
           <Button
-            className="absolute top-4 right-4 p-2"
+            className="absolute top-4 right-4 p-2 z-10"
             onClick={() => setIsSideOpen(!isSideOpen)}
           >
             {isSideOpen ? <SidebarOpen /> : <SidebarClose />}
@@ -85,7 +85,7 @@ export function Info({ lesson }: InfoProps) {
               )}
             </div>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-200px)]">
             {lesson.outline ? (
               <ul className="space-y-3">
                 {lesson.outline.map((item, key) => {
