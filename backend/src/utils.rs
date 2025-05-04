@@ -272,7 +272,7 @@ pub async fn start_lesson_pipeline(
         "content": [
             {
                 "type": "text",
-                "text": "Explica el siguiente imagen."
+                "text": "Explica el siguiente imagen sin titulo. Evita ser redundante. Devuelve el texto en español. No agregas estilos al texto como bold. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones. No usas newlines y haz el texto en un solo párrafo."
             },
             {
                 "type": "image_url",
@@ -427,7 +427,7 @@ pub async fn start_lesson_pipeline(
             // Generate TTS audio for text steps
             let tts_response = reqwest::Client
                 ::new()
-                .post(format!("https://api.elevenlabs.io/v1/text-to-speech/86V9x9hrQds83qf7zaGn"))
+                .post(format!("https://api.elevenlabs.io/v1/text-to-speech/J4vZAFDEcpenkMp3f3R9"))
                 .query(
                     &[
                         ("optimize_streaming_latsency", "0"),
