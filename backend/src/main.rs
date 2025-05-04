@@ -6,7 +6,7 @@ use tracing::info;
 use std::{ env, sync::Arc };
 use tokio::net::TcpListener;
 use tracing_subscriber::FmtSubscriber;
-use tower_http::normalize_path::NormalizePathLayer;
+use tower_http::{ normalize_path::NormalizePathLayer, cors::CorsLayer };
 
 mod utils;
 mod routes;
@@ -30,13 +30,19 @@ async fn main() {
         move |s| websocket::on_connect(s, collections)
     });
 
+    let cors = CorsLayer::new()
+        .allow_origin(tower_http::cors::Any)
+        .allow_methods(tower_http::cors::Any)
+        .allow_headers(tower_http::cors::Any);
+
     let app = Router::new()
         .route(
             "/",
             get(|| async { "You're not supposed to be here!" })
         )
         .nest("/lessons", routes::lessons::get_routes(Arc::clone(&collections)))
-        .layer(layer);
+        .layer(layer)
+        .layer(cors);
 
     let app = NormalizePathLayer::trim_trailing_slash().layer(app);
 

@@ -22,7 +22,7 @@ strum = "0.27.1"
 strum_macros = "0.27.1"
 chrono = "0.4.38"
 openssl = { version = "0.10.68", features = ["vendored"] }
-tower-http = { version = "0.6.1", features = ['normalize-path'] }
+tower-http = { version = "0.6.1", features = ['normalize-path', 'cors'] }
 tower = "0.5.1"
 openrouter = "0.1.0"
 openrouter_api = "0.1.4"
