@@ -1,5 +1,4 @@
-use chrono::format;
-use mongodb::{ bson::{ doc, oid::ObjectId, Array, Document }, Client, Collection };
+use mongodb::{ bson::{ doc, oid::ObjectId, Document }, Client, Collection };
 use openrouter_api::{ api::ChatApi, utils, ChatCompletionRequest, Message, OpenRouterClient };
 use reqwest::header;
 use serde_json::json;
@@ -74,7 +73,7 @@ pub async fn start_lesson_pipeline(
         Devuelve un objeto JSON con: \
         - 'title': título general de la lección \
         - 'description': descripción breve de la lección \
-        - 'outline': array de objetos, cada uno con 'title' (título del paso), 'media_type' (media que va a generar, los opciones son ['text', 'image'], y 'prompt' (instrucción para explicar el paso). \
+        - 'outline': array de objetos, cada uno con 'title' (título del paso), 'media_type' (media que va a generar, los opciones son ['text', 'image'], 'prompt' (instrucción para explicar el paso o generar el imagen), y 'speech' es para generar un texto que dura 10 segundos dando una explicacion sobr el imagen o texto. \
         Si vas a poner un imagen, el 'prompt' debe ser una pregunta o instrucción que se puede responder con una imagen y si incluye texto, debe estar claro en el prompt que texto debe poner o especificar que no va a haber texto. \
         La información debe adaptarse al nivel educativo: primaria con pasos simples, universitario con pasos detallados. Todos deben tener un balance entre imagenes y texto. \
         Evita redundancias. Texto en español sin formato. Solo JSON sin otros textos.",
@@ -110,9 +109,10 @@ pub async fn start_lesson_pipeline(
                                 "properties": {
                                     "title": {"type": "string"},
                                     "media_type": {"type": "string"},
-                                    "prompt": {"type": "string"}
+                                    "prompt": {"type": "string"},
+                                    "speech": {"type": "string"}
                                 },
-                                "required": ["title", "media_type", "prompt"],
+                                "required": ["title", "media_type", "prompt", "speech"],
                                 "additionalProperties": false
                             }
                         }
@@ -211,6 +211,10 @@ pub async fn start_lesson_pipeline(
             .get("media_type")
             .and_then(|v| v.as_str())
             .unwrap_or("text");
+        let speech = step
+            .get("speech")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
 
         let (image, explanation) = if media_type == "image" {
             if let Some(images) = wikipedia_images.clone() {
@@ -323,7 +327,7 @@ pub async fn start_lesson_pipeline(
                 messages: vec![Message {
                     role: "user".to_string(),
                     content: format!(
-                        "Explica siguiente paso y da el titulo y hazlo de acuerdo con el prompt y title: '{}' y '{}'. Evita ser redundante. Devuelve el texto en español. No agregas estilos al texto como bold. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones. No usas newlines y haz el texto en un solo párrafo.",
+                        "Explica siguiente paso y da el titulo y hazlo de acuerdo con el prompt y title: '{}' y '{}'. Evita ser redundante. Devuelve el texto en español. Agrega markdown simple como listas/bulleted points o negritas. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones. No usas newlines y haz el texto corto y conciso.",
                         step_title,
                         step_prompt_content
                     ),
@@ -431,7 +435,7 @@ pub async fn start_lesson_pipeline(
                 .header("xi-api-key", &tts_api_key)
                 .json(
                     &json!({
-            "text": &explanation,
+            "text": speech,
             "voice_settings": {
                 "stability": 0.5,
                 "similarity_boost": 0.75,
@@ -500,6 +504,7 @@ pub async fn start_lesson_pipeline(
                                     None
                                 },
                                 "explanation": explanation,
+                                "speech": speech.to_string(),
                                 "tts": tts_id,
                                 "references": references,
                             }]
