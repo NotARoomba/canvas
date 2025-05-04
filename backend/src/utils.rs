@@ -250,12 +250,7 @@ pub async fn start_lesson_pipeline(
                 }
             };
 
-            if !image_b64.contains("data:image/png;base64,") {
-                info!("Invalid base64 image data");
-                continue;
-            }
-            image_b64 = format!("data:image/png;base64,{}", image_b64);
-
+            image_b64 = "data:image/png;base64,".to_string() + &image_b64;
             // Generate explanation using original model
             let client = reqwest::Client::new();
             let request_body =
