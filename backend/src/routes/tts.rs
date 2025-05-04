@@ -1,27 +1,31 @@
 use std::sync::Arc;
 
-use axum::{
-    extract::Path,
-    response::IntoResponse,
-    routing::get,
-    Json,
-    Router,
-};
-use mongodb::bson::{doc, oid::ObjectId};
+use axum::{ extract::Path, response::{ IntoResponse, Response }, routing::get, Json, Router };
+use mongodb::bson::{ doc, oid::ObjectId };
 use serde_json::json;
-use crate::{types::StatusCodes, utils::Collections};
+use crate::{ types::StatusCodes, utils::Collections };
 
-pub async fn get_tts(Path(id): Path<String>, collections: &Collections) -> impl IntoResponse + use<> {
+pub async fn get_tts(Path(id): Path<String>, collections: &Collections) -> Response {
     if id.len() == 0 {
-        return Json(json!({"status": StatusCodes::InvalidID}));
+        return Json(json!({"status": StatusCodes::InvalidID})).into_response();
     }
-    let tts = collections.tts.find_one(doc! { "_id":  ObjectId::parse_str(id).unwrap() }).await.unwrap_or(None);
+    let tts = collections.tts
+        .find_one(doc! { "_id":  ObjectId::parse_str(id).unwrap() }).await
+        .unwrap_or(None);
     match tts.clone() {
         //send the binary data
         Some(tts) => {
-            Json(json!({"status": StatusCodes::Success, "tts": tts.data}))
-        },
-        None => Json(json!({"status": StatusCodes::LessonNotFound})),
+            // send raw mp3 with headers
+            let data = tts.data;
+            let response = axum::response::Response
+                ::builder()
+                .header("Content-Type", "audio/mpeg")
+                .header("Content-Length", data.len())
+                .body(axum::body::Body::from(data.to_vec()))
+                .unwrap();
+            return response;
+        }
+        None => Json(json!({"status": StatusCodes::AudioNotFound})).into_response(),
     }
 }
 

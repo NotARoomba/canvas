@@ -1,3 +1,4 @@
+use axum_extra::handler::Or;
 use mongodb::bson::doc;
 use serde::{ Deserialize, Deserializer, Serialize };
 
@@ -62,6 +63,7 @@ pub enum StatusCodes {
     InvalidID = 4,
     UserNotFound = 5,
     LessonNotFound = 6,
+    AudioNotFound = 7,
 }
 
 impl Serialize for StatusCodes {
@@ -77,6 +79,10 @@ impl Serialize for StatusCodes {
 //     pub tts: String,
 // }
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct File {
+pub struct Image {
     pub data: String,
+}
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct TTS {
+    pub data: Vec<u8>,
 }

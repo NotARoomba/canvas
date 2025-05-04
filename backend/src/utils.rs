@@ -5,7 +5,7 @@ use serde_json::json;
 use socketioxide::SocketIo;
 use tracing::info;
 use std::env;
-use crate::types::{ Difficulty, File };
+use crate::types::{ Difficulty, Image, TTS };
 use mongodb::bson::Binary;
 use mongodb::bson::spec::BinarySubtype;
 
@@ -13,8 +13,8 @@ use mongodb::bson::spec::BinarySubtype;
 pub struct Collections {
     // pub users: Collection<User>,
     pub lessons: Collection<Document>,
-    pub images: Collection<File>,
-    pub tts: Collection<File>,
+    pub images: Collection<Image>,
+    pub tts: Collection<TTS>,
 }
 
 pub async fn init_database(_io: &SocketIo) -> Result<Collections, String> {
@@ -31,10 +31,10 @@ pub async fn init_database(_io: &SocketIo) -> Result<Collections, String> {
     ) as Collection<Document>;
     let images = canva_db.collection(
         env::var("IMAGE_COLLECTION").expect("IMAGE_COLLECTION must be set").as_str()
-    ) as Collection<File>;
+    ) as Collection<Image>;
     let tts = canva_db.collection(
         env::var("TTS_COLLECTION").expect("TTS_COLLECTION must be set").as_str()
-    ) as Collection<File>;
+    ) as Collection<TTS>;
     info!("Connected to MongoDB!");
     Ok(Collections { lessons, images, tts })
 }
@@ -75,7 +75,7 @@ pub async fn start_lesson_pipeline(
         - 'description': descripción breve de la lección \
         - 'outline': array de objetos, cada uno con 'title' (título del paso), 'media_type' (media que va a generar, los opciones son ['text', 'image'], y 'prompt' (instrucción para explicar el paso o generar el imagen). \
         Si vas a poner un imagen, el 'prompt' debe ser una pregunta o instrucción que se puede responder con una imagen y si incluye texto, debe estar claro en el prompt que texto debe poner o especificar que no va a haber texto. \
-        La información debe adaptarse al nivel educativo: primaria con pasos simples y mas imagenes, universitario con pasos detallados. \
+        La información debe adaptarse al nivel educativo: primaria con pasos simples, universitario con pasos detallados. Todos deben tener un balance entre imagenes y texto. \
         Evita redundancias. Texto en español sin formato. Solo JSON sin otros textos.",
         prompt,
         Into::<String>::into(difficulty)
@@ -337,7 +337,7 @@ pub async fn start_lesson_pipeline(
             };
 
             // upload image to MongoDB
-            let image_doc = File {
+            let image_doc = Image {
                 data: image_b64.clone(),
             };
             let image_result = collections.images.insert_one(image_doc).await;
@@ -454,11 +454,11 @@ pub async fn start_lesson_pipeline(
                         let audio_data = response.bytes().await.unwrap_or_default();
 
                         match
-                            collections.tts.insert_one(File {
+                            collections.tts.insert_one(TTS {
                                 data: (Binary {
                                     subtype: BinarySubtype::Generic,
                                     bytes: audio_data.to_vec(),
-                                }).to_string(),
+                                }).bytes,
                             }).await
                         {
                             Ok(result) =>
