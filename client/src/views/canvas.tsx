@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Info } from "@/components/canvas/info";
 import { io } from "socket.io-client";
 import { useEffect, useState } from "react";
-
+import { fetcher } from "@/lib/fetcher";
+import useSWR from "swr";
 interface CanvasProps {
   id: string;
 }
@@ -33,13 +34,13 @@ export interface CanvasData {
 }
 
 export function Canvas({ id }: CanvasProps) {
-  // const { data, error } = useSWR<{ lesson: CanvasData }>(
-  //   `https://canvas.notaroomba.dev/lessons/${id}`,
-  //   fetcher,
-  //   {
-  //     refreshInterval: 2 * 1000,
-  //   }
-  // );
+ const { data, error } = useSWR<{ lesson: CanvasData }>(
+    `https://canvas.notaroomba.dev/lessons/${id}`,
+    fetcher,
+    {
+       refreshInterval: 2 * 1000,
+     }
+   );
 
   // const { data, error } = useSWRSubscription<{ lesson: CanvasData }>(
   //   "ws://localhost:3001/",
@@ -47,7 +48,7 @@ export function Canvas({ id }: CanvasProps) {
 
   //   }
   // );
-  const [data, setData] = useState<{ lesson: CanvasData } | null>(null);
+/**  const [data, setData] = useState<{ lesson: CanvasData } | null>(null);
 
   useEffect(() => {
     const socket = io("ws://canvas.notaroomba.dev/");
@@ -69,7 +70,7 @@ export function Canvas({ id }: CanvasProps) {
       socket.close();
     };
   }, []);
-
+*/
   if (!data) {
     return (
       <div className="flex h-screen w-screen items-center justify-center p-4">
