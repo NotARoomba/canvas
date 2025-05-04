@@ -1,5 +1,6 @@
 use mongodb::bson::doc;
 use serde::{ Deserialize, Deserializer, Serialize };
+use strum_macros::AsRefStr;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
 pub enum Difficulty {
@@ -84,4 +85,16 @@ pub struct Image {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct TTS {
     pub data: Vec<u8>,
+}
+
+#[derive(Debug, Serialize, Deserialize, AsRefStr)]
+pub enum WebSocketEvents {
+    #[strum(serialize = "connect")]
+    Connect,
+    #[strum(serialize = "disconnenct")]
+    Disconnect,
+    #[strum(serialize = "request_lesson_data")]
+    RequestLessonData,
+    #[strum(serialize = "update_lesson_data")]
+    UpdateLessonData,
 }

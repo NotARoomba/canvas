@@ -1,9 +1,9 @@
-import useSWR from "swr";
-import { fetcher } from "@/lib/fetcher";
 import { Link } from "wouter";
+import useSWRSubscription from "swr/subscription";
 import { Button } from "@/components/ui/button";
 import { Info } from "@/components/canvas/info";
-
+import { io } from "socket.io-client";
+import { useEffect, useState } from "react";
 interface CanvasProps {
   id: string;
 }
@@ -33,13 +33,42 @@ export interface CanvasData {
 }
 
 export function Canvas({ id }: CanvasProps) {
-  const { data, error } = useSWR<{ lesson: CanvasData }>(
-    `https://canvas.notaroomba.dev/lessons/${id}`,
-    fetcher,
-    {
-      refreshInterval: 2 * 1000,
-    }
-  );
+  // const { data, error } = useSWR<{ lesson: CanvasData }>(
+  //   `https://canvas.notaroomba.dev/lessons/${id}`,
+  //   fetcher,
+  //   {
+  //     refreshInterval: 2 * 1000,
+  //   }
+  // );
+
+  // const { data, error } = useSWRSubscription<{ lesson: CanvasData }>(
+  //   "ws://localhost:3001/",
+  //   (key: string, { next }: any) => {
+
+  //   }
+  // );
+  const [data, setData] = useState<{ lesson: CanvasData } | null>(null);
+
+  useEffect(() => {
+    const socket = io("ws://localhost:3001/");
+    socket.on("request_lesson_data", (data: any) => {
+      console.log("request_lesson_data", data);
+    });
+
+    socket.on("update_lesson_data", (data) => {
+      console.log("update_lesson_data", data);
+      if (!data)
+        socket.emit("request_lesson_data", id, (res: any) => {
+          setData({ lesson: res });
+        });
+      else {
+        setData({ lesson: data });
+      }
+    });
+    return () => {
+      socket.close();
+    };
+  }, []);
 
   if (!data) {
     return (
@@ -49,14 +78,13 @@ export function Canvas({ id }: CanvasProps) {
     );
   }
 
-  if (error || !data.lesson) {
+  if (!data.lesson) {
     return (
       <div className="flex h-screen w-screen items-center justify-center p-4">
         <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-white rounded-2xl p-4">
           <h1 className="text-2xl font-bold">No pudimos cargar este canvas</h1>
           <p className="text-gray-600">
-            {error?.message ??
-              "Hubo un error al cargar el canvas. Por favor, intenta de nuevo."}
+            {"Hubo un error al cargar el canvas. Por favor, intenta de nuevo."}
           </p>
           <Link href="/" asChild>
             <Button>Volver al inicio</Button>
