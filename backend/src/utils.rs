@@ -2,7 +2,7 @@ use futures::StreamExt;
 use mongodb::{
     bson::{ doc, oid::ObjectId, Document },
     change_stream::event::OperationType,
-    options::{ ChangeStreamPreAndPostImages, FullDocumentBeforeChangeType, FullDocumentType },
+    options::{ FullDocumentBeforeChangeType, FullDocumentType },
     Client,
     Collection,
 };

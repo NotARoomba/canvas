@@ -3,8 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Info } from "@/components/canvas/info";
 import { io } from "socket.io-client";
 import { useEffect, useState } from "react";
-import { fetcher } from "@/lib/fetcher";
-import useSWR from "swr";
+
 interface CanvasProps {
   id: string;
 }
@@ -34,7 +33,7 @@ export interface CanvasData {
 }
 
 export function Canvas({ id }: CanvasProps) {
- const { data, error } = useSWR<{ lesson: CanvasData }>(
+  /** const { data, error } = useSWR<{ lesson: CanvasData }>(
     `https://canvas.notaroomba.dev/lessons/${id}`,
     fetcher,
     {
@@ -45,10 +44,10 @@ export function Canvas({ id }: CanvasProps) {
   // const { data, error } = useSWRSubscription<{ lesson: CanvasData }>(
   //   "ws://localhost:3001/",
   //   (key: string, { next }: any) => {
-
+*/
   //   }
   // );
-/**  const [data, setData] = useState<{ lesson: CanvasData } | null>(null);
+  const [data, setData] = useState<CanvasData | null>(null);
 
   useEffect(() => {
     const socket = io("ws://canvas.notaroomba.dev/");
@@ -60,17 +59,17 @@ export function Canvas({ id }: CanvasProps) {
       console.log("update_lesson_data", data);
       if (!data)
         socket.emit("request_lesson_data", id, (res: any) => {
-          setData({ lesson: res });
+          setData(res);
         });
       else {
-        setData({ lesson: data });
+        setData(data);
       }
     });
     return () => {
       socket.close();
     };
-  }, []);
-*/
+  }, [data]);
+
   if (!data) {
     return (
       <div className="flex h-screen w-screen items-center justify-center p-4">
@@ -79,7 +78,7 @@ export function Canvas({ id }: CanvasProps) {
     );
   }
 
-  if (!data.lesson) {
+  if (!data) {
     return (
       <div className="flex h-screen w-screen items-center justify-center p-4">
         <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-white rounded-2xl p-4">
@@ -95,5 +94,5 @@ export function Canvas({ id }: CanvasProps) {
     );
   }
 
-  return <Info lesson={data.lesson} />;
+  return <Info lesson={data} />;
 }
