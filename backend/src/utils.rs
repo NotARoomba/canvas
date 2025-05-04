@@ -427,7 +427,7 @@ pub async fn start_lesson_pipeline(
             // Generate TTS audio for text steps
             let tts_response = reqwest::Client
                 ::new()
-                .post(format!("https://api.elevenlabs.io/v1/text-to-speech/J4vZAFDEcpenkMp3f3R9"))
+                .post(format!("https://api.elevenlabs.io/v1/text-to-speech/86V9x9hrQds83qf7zaGn"))
                 .query(
                     &[
                         ("optimize_streaming_latsency", "0"),

@@ -18,7 +18,7 @@ pub async fn get_image(Path(id): Path<String>, collections: &Collections) -> Res
             let data = image.data;
             let response = axum::response::Response
                 ::builder()
-                .header("Content-Type", "image/png")
+                .header("Content-Type", "image/jpeg")
                 .header("Content-Length", data.len())
                 .body(axum::body::Body::from(data))
                 .unwrap();
