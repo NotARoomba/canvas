@@ -1,5 +1,6 @@
 import { Route, Switch } from "wouter";
 import Home from "@/views/home";
+import { Canvas } from "@/views/canvas";
 
 export function App() {
   return (
@@ -9,7 +10,7 @@ export function App() {
           <Home />
         </Route>
 
-        <Route path="/:id">{({ id }) => <App />}</Route>
+        <Route path="/:id">{({ id }) => <Canvas id={id} />}</Route>
 
         <Route>
           <p>404</p>
