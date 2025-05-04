@@ -411,7 +411,8 @@ pub async fn start_lesson_pipeline(
 
             let text_content = &text_response.choices[0].message.content
                 .replace("```json", "")
-                .replace("```", "");
+                .replace("```", "")
+                .replace("\n", "");
 
             let text_json: serde_json::Value = match serde_json::from_str(text_content) {
                 Ok(v) => v,
