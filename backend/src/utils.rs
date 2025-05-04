@@ -1,42 +1,83 @@
-use mongodb::{ bson::{ doc, oid::ObjectId, Document }, Client, Collection };
+use futures::StreamExt;
+use mongodb::{
+    bson::{ doc, oid::ObjectId, Document },
+    change_stream::event::OperationType,
+    options::{ ChangeStreamPreAndPostImages, FullDocumentBeforeChangeType, FullDocumentType },
+    Client,
+    Collection,
+};
 use openrouter_api::{ api::ChatApi, utils, ChatCompletionRequest, Message, OpenRouterClient };
 use reqwest::header;
 use serde_json::json;
 use socketioxide::SocketIo;
+use tokio::task;
 use tracing::info;
 use std::env;
-use crate::types::{ Difficulty, Image, TTS };
+use crate::types::{ Difficulty, Image, WebSocketEvents, TTS };
 use mongodb::bson::Binary;
 use mongodb::bson::spec::BinarySubtype;
 
 #[derive(Debug, Clone)]
 pub struct Collections {
-    // pub users: Collection<User>,
     pub lessons: Collection<Document>,
     pub images: Collection<Image>,
     pub tts: Collection<TTS>,
 }
 
-pub async fn init_database(_io: &SocketIo) -> Result<Collections, String> {
-    let uri: String = env::var("MONGODB").expect("MONGODB must be set");
-    let client = Client::with_uri_str(uri).await.expect("Failed to connect to MongoDB");
-    let canva_db = client.database(
-        env::var("CANVA_DATABASE").expect("CANVA_DATABASE must be set").as_str()
-    );
-    // let users = canva_db.collection(
-    //     env::var("USER_COLLECTION").expect("USER_COLLECTION must be set").as_str()
-    // ) as Collection<User>;
-    let lessons = canva_db.collection(
-        env::var("LESSON_COLLECTION").expect("LESSON_COLLECTION must be set").as_str()
-    ) as Collection<Document>;
-    let images = canva_db.collection(
-        env::var("IMAGE_COLLECTION").expect("IMAGE_COLLECTION must be set").as_str()
-    ) as Collection<Image>;
-    let tts = canva_db.collection(
-        env::var("TTS_COLLECTION").expect("TTS_COLLECTION must be set").as_str()
-    ) as Collection<TTS>;
-    info!("Connected to MongoDB!");
-    Ok(Collections { lessons, images, tts })
+pub async fn init_database(io: &SocketIo) -> Result<Collections, String> {
+    let uri = env::var("MONGODB").expect("MONGODB must be set");
+    let client = Client::with_uri_str(&uri).await.expect("Failed to connect to MongoDB");
+
+    let db = client.database(&env::var("CANVA_DATABASE").expect("CANVA_DATABASE must be set"));
+    // let enable = ChangeStreamPreAndPostImages::builder().enabled(true).build();
+    // let result = db.create_collection("lessons").change_stream_pre_and_post_images(enable).await;
+
+    let collections = Collections {
+        lessons: db.collection(
+            &env::var("LESSON_COLLECTION").expect("LESSON_COLLECTION must be set")
+        ),
+        images: db.collection(&env::var("IMAGE_COLLECTION").expect("IMAGE_COLLECTION must be set")),
+        tts: db.collection(&env::var("TTS_COLLECTION").expect("TTS_COLLECTION must be set")),
+    };
+
+    let io = io.clone();
+    let lessons = collections.lessons.clone();
+
+    let pipeline = vec![
+        doc! {
+            "$match": {
+                "$or": [
+                    { "operationType": "insert" },
+                    { "operationType": "update" }
+                ]
+            }
+        }
+    ];
+
+    task::spawn(async move {
+        let mut change_stream = lessons
+            .watch()
+            .pipeline(pipeline.clone())
+            .full_document_before_change(FullDocumentBeforeChangeType::Required)
+            .full_document(FullDocumentType::Required).await
+            .expect("Failed to watch lessons");
+
+        while
+            let Some(change) = change_stream.next().await.transpose().expect("Failed to get change")
+        {
+            if change.operation_type == OperationType::Update {
+                let updated_doc = change.full_document
+                    .as_ref()
+                    .expect("Failed to get full document");
+                let oid = updated_doc.get_object_id("_id").unwrap().to_string();
+                info!("Lesson updated: {}", oid);
+                let _ = io.to(oid).emit(WebSocketEvents::UpdateLessonData, &updated_doc.clone());
+            }
+        }
+    });
+
+    info!("Database initialized with change streaming");
+    Ok(collections)
 }
 
 //functions for pipeline
@@ -327,7 +368,7 @@ pub async fn start_lesson_pipeline(
                 messages: vec![Message {
                     role: "user".to_string(),
                     content: format!(
-                        "Explica siguiente paso y da el titulo y hazlo de acuerdo con el prompt y title: '{}' y '{}'. Evita ser redundante. Devuelve el texto en español. Agrega markdown simple como listas/bulleted points o negritas. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones. No usas newlines y haz el texto corto y conciso.",
+                        "Explica siguiente paso y da el titulo y hazlo de acuerdo con el prompt y title: '{}' y '{}'. Evita ser redundante. Devuelve el texto en español. Usa markdown simple como listas/bulleted points o negritas. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones. No usas newlines y haz el texto corto y conciso. Para mostrar matematicas, usa KaTeX entre $.",
                         step_title,
                         step_prompt_content
                     ),
