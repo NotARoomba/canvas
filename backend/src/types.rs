@@ -69,3 +69,10 @@ impl Serialize for StatusCodes {
         serializer.serialize_u8(*self as u8)
     }
 }
+
+pub struct Step {
+    pub title: String,
+    pub explanation: String,
+    pub image: Option<String>,
+    pub tts: String,
+}

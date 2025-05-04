@@ -1,5 +1,6 @@
 use mongodb::{ bson::{ doc, oid::ObjectId, Document }, Client, Collection };
 use openrouter_api::{ utils, ChatCompletionRequest, OpenRouterClient, Message };
+use reqwest::header;
 use serde_json::json;
 use socketioxide::SocketIo;
 use tracing::info;
@@ -48,7 +49,7 @@ pub async fn start_lesson_pipeline(
     let client = match
         OpenRouterClient::new()
             .with_base_url("https://openrouter.ai/api/v1/")
-            .and_then(|c| c.with_api_key(api_key))
+            .and_then(|c| c.with_api_key(api_key.clone()))
     {
         Ok(c) => c,
         Err(e) => {
@@ -62,8 +63,8 @@ pub async fn start_lesson_pipeline(
         Devuelve un objeto JSON con: \
         - 'title': título general de la lección \
         - 'description': descripción breve de la lección \
-        - 'outline': array de objetos, cada uno con 'title' (título del paso) y 'prompt' (instrucción para explicar el paso). \
-        La información debe adaptarse al nivel educativo: primaria con pasos simples, universitario con pasos detallados. \
+        - 'outline': array de objetos, cada uno con 'title' (título del paso), 'media_type' (media que va a generar, los opciones son ['text', 'image'], y 'prompt' (instrucción para explicar el paso o generar el imagen). \
+        La información debe adaptarse al nivel educativo: primaria con pasos simples y mas imagenes, universitario con pasos detallados. \
         Evita redundancias. Texto en español sin formato. Solo JSON sin otros textos.",
         prompt,
         Into::<String>::into(difficulty)
@@ -96,9 +97,10 @@ pub async fn start_lesson_pipeline(
                                 "type": "object",
                                 "properties": {
                                     "title": {"type": "string"},
+                                    "media_type": {"type": "string"},
                                     "prompt": {"type": "string"}
                                 },
-                                "required": ["title", "prompt"],
+                                "required": ["title", "media_type", "prompt"],
                                 "additionalProperties": false
                             }
                         }
@@ -158,6 +160,7 @@ pub async fn start_lesson_pipeline(
             Some(
                 doc! {
             "title": step.get("title")?.as_str()?,
+            "media_type": step.get("media_type")?.as_str()?,
             "prompt": step.get("prompt")?.as_str()?
         }
             )
@@ -180,75 +183,221 @@ pub async fn start_lesson_pipeline(
 
     // Process each outline step
     for (i, step) in outline_array.iter().enumerate() {
-        let step_prompt = match (step.get("prompt"), step.get("title")) {
-            (Some(prompt), Some(title)) => {
-                format!(
-                    "Explica el paso '{}' según el prompt: '{}'. \
-                    Devuelve JSON con 'title' y 'explanation'. \
-                    Texto en español sin formato.",
-                    title.as_str().unwrap_or(""),
-                    prompt.as_str().unwrap_or("")
-                )
-            }
-            _ => {
-                info!("Invalid step format at index {}", i);
-                continue;
-            }
-        };
+        let step_title = step
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        let step_prompt_content = step
+            .get("prompt")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        let media_type = step
+            .get("media_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("text");
 
-        let detail_request = ChatCompletionRequest {
-            model: "google/gemini-2.0-flash-lite-001".to_string(),
-            messages: vec![Message {
-                role: "user".to_string(),
-                content: step_prompt,
-                name: None,
-                tool_calls: None,
-            }],
-            stream: None,
-            response_format: serde_json
-                ::from_value(
-                    json!({
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "step",
-                    "strict": true,
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "title": { "type": "string" },
-                            "explanation": { "type": "string" }
-                        },
-                        "required": ["title", "explanation"],
-                        "additionalProperties": false
-                    }
+        let (image, explanation) = if media_type == "image" {
+            // Get OpenAI API key
+            let openai_key = match std::env::var("OPENAI_API_KEY") {
+                Ok(k) => k,
+                Err(_) => {
+                    info!("Missing OPENAI_API_KEY environment variable");
+                    continue;
                 }
-            })
-                )
-                .ok(),
-            tools: None,
-            provider: None,
-            models: None,
-            transforms: None,
-        };
+            };
 
-        let detail_response = match chat_api.chat_completion(detail_request).await {
-            Ok(r) => r,
-            Err(e) => {
-                info!("Detail request for step {} failed: {}", i + 1, e);
+            // Create HTTP client
+            let client = reqwest::Client::new();
+
+            // Generate image with DALL-E
+            let image_response = match
+                client
+                    .post("https://api.openai.com/v1/images/generations")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", openai_key))
+                    .json(
+                        &json!({
+                    "model": "gpt-image-1",
+                    "prompt": step_prompt_content,
+                    "n": 1,
+                    "size": "1024x1024",
+                    "quality": "low",
+                })
+                    )
+                    .send().await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    info!("Image generation failed: {}", e);
+                    continue;
+                }
+            };
+
+            // Parse image response
+            // info!("Image response: {:?}", image_response);
+            let image_json: serde_json::Value = match image_response.json().await {
+                Ok(j) => j,
+                Err(e) => {
+                    info!("Failed to parse image response: {}", e);
+                    continue;
+                }
+            };
+
+            let mut image_b64 = match image_json["data"][0]["b64_json"].as_str() {
+                Some(b64) => b64.to_string(),
+                None => {
+                    info!("Missing base64 image data");
+                    continue;
+                }
+            };
+
+            if !image_b64.contains("data:image/png;base64,") {
+                info!("Invalid base64 image data");
                 continue;
             }
-        };
+            image_b64 = format!("data:image/png;base64,{}", image_b64);
 
-        let detail_content = &detail_response.choices[0].message.content
-            .replace("```json", "")
-            .replace("```", "");
-
-        let detail_json: serde_json::Value = match serde_json::from_str(detail_content) {
-            Ok(v) => v,
-            Err(e) => {
-                info!("Failed to parse explanation JSON: {}", e);
-                continue;
+            // Generate explanation using original model
+            let client = reqwest::Client::new();
+            let request_body =
+                json!({
+    "model": "google/gemini-2.5-flash-preview",
+    "messages": [{
+        "role": "user",
+        "content": [
+            {
+                "type": "text",
+                "text": "Explica el siguiente imagen."
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_b64
+                }
             }
+        ]
+    }],
+    "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "explanation",
+            "strict": true,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "explanation": {"type": "string"}
+                },
+                "required": ["explanation"],
+                "additionalProperties": false
+            }
+        }
+    }
+});
+
+            let response = match
+                client
+                    .post("https://openrouter.ai/api/v1/chat/completions")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", api_key))
+                    .json(&request_body)
+                    .send().await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    info!("Explanation request failed: {}", e);
+                    continue;
+                }
+            };
+
+            let response_json: serde_json::Value = match response.json().await {
+                Ok(j) => j,
+                Err(e) => {
+                    info!("Failed to parse explanation response: {}", e);
+                    continue;
+                }
+            };
+
+            let explanation = response_json["choices"][0]["message"]["content"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+
+            let explanation_json: serde_json::Value = match
+                serde_json::from_str(&explanation.replace("```json", "").replace("```", ""))
+            {
+                Ok(v) => v,
+                Err(e) => {
+                    info!("Failed to parse explanation JSON: {}", e);
+                    continue;
+                }
+            };
+
+            (
+                Some(image_b64),
+                explanation_json["explanation"]
+                    .as_str()
+                    .unwrap_or("No explanation generated")
+                    .to_string(),
+            )
+        } else {
+            // Text-based step
+            let text_request = ChatCompletionRequest {
+                model: "google/gemini-2.5-flash-preview".to_string(),
+                messages: vec![Message {
+                    role: "user".to_string(),
+                    content: format!(
+                        "Explica siguiente paso y da el titulo y hazlo de acuerdo con el prompt y title: '{}' y '{}'. Evita ser redundante. Devuelve el texto en español. No agregas estilos al texto como bold. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones.",
+                        step_title,
+                        step_prompt_content
+                    ),
+                    name: None,
+                    tool_calls: None,
+                }],
+                stream: None,
+                response_format: serde_json
+                    ::from_value(
+                        json!({
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "explanation",
+                        "strict": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "explanation": {"type": "string"}
+                            },
+                            "required": ["explanation"],
+                            "additionalProperties": false
+                        }
+                    }
+                })
+                    )
+                    .ok(),
+                tools: None,
+                provider: None,
+                models: None,
+                transforms: None,
+            };
+
+            let text_response = match chat_api.chat_completion(text_request).await {
+                Ok(r) => r,
+                Err(e) => {
+                    info!("Text explanation failed for step {}: {}", i + 1, e);
+                    continue;
+                }
+            };
+
+            let text_content = &text_response.choices[0].message.content
+                .replace("```json", "")
+                .replace("```", "");
+
+            let text_json: serde_json::Value = match serde_json::from_str(text_content) {
+                Ok(v) => v,
+                Err(e) => {
+                    info!("Failed to parse text JSON: {}", e);
+                    continue;
+                }
+            };
+
+            (None, text_json["explanation"].as_str().unwrap_or_default().to_string())
         };
 
         // Update lesson with new step
@@ -259,8 +408,13 @@ pub async fn start_lesson_pipeline(
                     "$push": {
                         "steps": {
                             "$each": [{
-                                "title": detail_json["title"].as_str().unwrap_or("<Invalid Title>"),
-                                "explanation": detail_json["explanation"].as_str().unwrap_or("<Invalid Explanation>")
+                                "title": step_title,
+                                "image": if media_type == "image" { 
+                                    Some(image) 
+                                } else { 
+                                    None 
+                                },
+                                "explanation": explanation
                             }]
                         }
                     }
