@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
 use axum::{ extract::Path, response::{ IntoResponse, Response }, routing::get, Json, Router };
+use base64::{ engine::general_purpose, Engine };
 use mongodb::bson::{ doc, oid::ObjectId };
 use serde_json::json;
+use tracing::info;
 use crate::{ types::StatusCodes, utils::Collections };
 
 pub async fn get_image(Path(id): Path<String>, collections: &Collections) -> Response {
@@ -15,10 +17,12 @@ pub async fn get_image(Path(id): Path<String>, collections: &Collections) -> Res
     match image.clone() {
         Some(image) => {
             // send raw image with headers
-            let data = image.data;
+            let data = general_purpose::STANDARD
+                .decode(image.data.replace("data:image/png;base64,", "").as_bytes())
+                .unwrap();
             let response = axum::response::Response
                 ::builder()
-                .header("Content-Type", "image/jpeg")
+                .header("Content-Type", "image/png")
                 .header("Content-Length", data.len())
                 .body(axum::body::Body::from(data))
                 .unwrap();
