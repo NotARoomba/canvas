@@ -4,6 +4,9 @@ import { Info } from "@/components/canvas/info";
 import { io } from "socket.io-client";
 import { useEffect, useState } from "react";
 
+import { fetcher } from "@/lib/fetcher";
+import useSWR from "swr";
+
 interface CanvasProps {
   id: string;
 }
@@ -33,7 +36,7 @@ export interface CanvasData {
 }
 
 export function Canvas({ id }: CanvasProps) {
-  /** const { data, error } = useSWR<{ lesson: CanvasData }>(
+   const { data, error } = useSWR<{ lesson: CanvasData }>(
     `https://canvas.notaroomba.dev/lessons/${id}`,
     fetcher,
     {
@@ -44,9 +47,10 @@ export function Canvas({ id }: CanvasProps) {
   // const { data, error } = useSWRSubscription<{ lesson: CanvasData }>(
   //   "ws://localhost:3001/",
   //   (key: string, { next }: any) => {
-*/
+
   //   }
   // );
+  /**
   const [data, setData] = useState<CanvasData | null>(null);
 
   useEffect(() => {
@@ -59,6 +63,7 @@ export function Canvas({ id }: CanvasProps) {
       console.log("update_lesson_data", data);
       if (!data)
         socket.emit("request_lesson_data", id, (res: any) => {
+          alert("request_lesson_data");
           setData(res);
         });
       else {
@@ -68,7 +73,7 @@ export function Canvas({ id }: CanvasProps) {
     return () => {
       socket.close();
     };
-  }, [data]);
+  }, [data]); */
 
   if (!data) {
     return (
@@ -94,5 +99,5 @@ export function Canvas({ id }: CanvasProps) {
     );
   }
 
-  return <Info lesson={data} />;
+  return <Info lesson={data.lesson} />;
 }

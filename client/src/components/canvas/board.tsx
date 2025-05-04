@@ -1,6 +1,6 @@
 import { CanvasData } from "@/views/canvas";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -21,14 +21,10 @@ export function Board({ lesson }: BoardProps) {
     setTransform?: (x: number, y: number, scale: number, duration?: number) => void;
   }>({});
 
-  if (!lesson.steps?.length) {
-    return <div>Cargando...</div>;
-  }
-
-  const steps = lesson.steps;
+  const steps = lesson.steps || [];
   const gridSize = Math.ceil(Math.sqrt(steps.length));
 
-  const playAudio = async (index: number) => {
+  const playAudio = useCallback(async (index: number) => {
     if (index >= 0 && index < steps.length && steps[index].tts) {
       if (audioRef.current) {
         audioRef.current.pause();
@@ -50,18 +46,9 @@ export function Board({ lesson }: BoardProps) {
       setIsPlaying(true);
       await audio.play();
     }
-  };
+  }, [steps]);
 
-  const toggleAudio = () => {
-    if (isPlaying && audioRef.current) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    } else if (currentStep >= 0) {
-      playAudio(currentStep);
-    }
-  };
-
-  const handleStepTransition = (index: number) => {
+  const handleStepTransition = useCallback((index: number) => {
     setCurrentStep(index);
 
     if (index === -1) {
@@ -86,22 +73,34 @@ export function Board({ lesson }: BoardProps) {
         600
       );
     }
-  };
+  }, [gridSize]);
 
-  // Auto-start playback when steps are loaded
+  const toggleAudio = useCallback(() => {
+    if (isPlaying && audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else if (currentStep >= 0) {
+      playAudio(currentStep);
+    }
+  }, [isPlaying, currentStep, playAudio]);
+
+  const startPlayback = useCallback(() => {
+    const startIndex = currentStep === -1 ? 0 : currentStep;
+    handleStepTransition(startIndex);
+    playAudio(startIndex);
+  }, [currentStep, handleStepTransition, playAudio]);
+
   useEffect(() => {
     if (steps.length > 0 && !hasStartedRef.current) {
       hasStartedRef.current = true;
       handleStepTransition(0);
       playAudio(0);
     }
-  }, [steps.length]);
+  }, [steps.length, handleStepTransition, playAudio]);
 
-  const startPlayback = () => {
-    const startIndex = currentStep === -1 ? 0 : currentStep;
-    handleStepTransition(startIndex);
-    playAudio(startIndex);
-  };
+  if (!steps.length) {
+    return <div>Cargando...</div>;
+  }
 
   return (
     <div className="w-full h-full bg-background rounded-lg overflow-hidden">
@@ -135,10 +134,7 @@ export function Board({ lesson }: BoardProps) {
 
           return (
             <>
-              <TransformComponent
-                wrapperClass="!w-full !h-full"
-                contentClass="!w-full !h-full"
-              >
+              <TransformComponent wrapperClass="!w-full !h-full" contentClass="!w-full !h-full">
                 <div
                   className="relative bg-gradient-to-br from-background to-muted/20"
                   style={{
