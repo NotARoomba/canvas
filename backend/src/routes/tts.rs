@@ -21,7 +21,7 @@ pub async fn get_tts(Path(id): Path<String>, collections: &Collections) -> Respo
                 ::builder()
                 .header("Content-Type", "audio/mpeg")
                 .header("Content-Length", data.len())
-                .body(axum::body::Body::from(data.to_vec()))
+                .body(axum::body::Body::from(data))
                 .unwrap();
             return response;
         }
