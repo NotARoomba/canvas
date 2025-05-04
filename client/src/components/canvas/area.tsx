@@ -2,7 +2,6 @@ import { CanvasData } from "@/views/canvas";
 import { Stage, Layer, Group, Text, Image, Rect } from "react-konva";
 import Konva from "konva";
 import { useEffect, useRef, useState } from "react";
-import { motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Play, Pause } from "lucide-react";
 import { Markdown } from "@/components/ui/markdown";
