@@ -4,7 +4,7 @@ use axum::{ extract::Path, response::{ IntoResponse, Response }, routing::get, J
 use base64::{ engine::general_purpose, Engine };
 use mongodb::bson::{ doc, oid::ObjectId };
 use serde_json::json;
-use tracing::info;
+// use tracing::info;
 use crate::{ types::StatusCodes, utils::Collections };
 
 pub async fn get_image(Path(id): Path<String>, collections: &Collections) -> Response {

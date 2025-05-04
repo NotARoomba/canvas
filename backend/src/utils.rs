@@ -1,5 +1,6 @@
-use mongodb::{ bson::{ doc, oid::ObjectId, Document }, Client, Collection };
-use openrouter_api::{ utils, ChatCompletionRequest, OpenRouterClient, Message };
+use chrono::format;
+use mongodb::{ bson::{ doc, oid::ObjectId, Array, Document }, Client, Collection };
+use openrouter_api::{ api::ChatApi, utils, ChatCompletionRequest, Message, OpenRouterClient };
 use reqwest::header;
 use serde_json::json;
 use socketioxide::SocketIo;
@@ -73,7 +74,7 @@ pub async fn start_lesson_pipeline(
         Devuelve un objeto JSON con: \
         - 'title': título general de la lección \
         - 'description': descripción breve de la lección \
-        - 'outline': array de objetos, cada uno con 'title' (título del paso), 'media_type' (media que va a generar, los opciones son ['text', 'image'], y 'prompt' (instrucción para explicar el paso o generar el imagen). \
+        - 'outline': array de objetos, cada uno con 'title' (título del paso), 'media_type' (media que va a generar, los opciones son ['text', 'image'], y 'prompt' (instrucción para explicar el paso). \
         Si vas a poner un imagen, el 'prompt' debe ser una pregunta o instrucción que se puede responder con una imagen y si incluye texto, debe estar claro en el prompt que texto debe poner o especificar que no va a haber texto. \
         La información debe adaptarse al nivel educativo: primaria con pasos simples, universitario con pasos detallados. Todos deben tener un balance entre imagenes y texto. \
         Evita redundancias. Texto en español sin formato. Solo JSON sin otros textos.",
@@ -192,6 +193,10 @@ pub async fn start_lesson_pipeline(
         ).await
         .expect("Failed to update lesson with outline");
 
+    let wikipedia_url = get_wikipedia_reference(&prompt, &chat_api, &collections, &id).await;
+    let wikipedia_images = get_wikipedia_images(&wikipedia_url).await;
+    let client = reqwest::Client::new();
+
     // Process each outline step
     for (i, step) in outline_array.iter().enumerate() {
         let step_title = step
@@ -208,6 +213,19 @@ pub async fn start_lesson_pipeline(
             .unwrap_or("text");
 
         let (image, explanation) = if media_type == "image" {
+            if let Some(images) = wikipedia_images.clone() {
+                for image in images {
+                    if is_relevant_image(image.clone(), step_title) {
+                        if let Some(image_url) = get_image_url(&image).await {
+                            let explanation = generate_image_explanation(
+                                image_url.clone(),
+                                api_key.clone()
+                            ).await;
+                            (Some(image_url), explanation);
+                        }
+                    }
+                }
+            }
             // Get OpenAI API key
             let openai_key = match std::env::var("OPENAI_API_KEY") {
                 Ok(k) => k,
@@ -217,10 +235,29 @@ pub async fn start_lesson_pipeline(
                 }
             };
 
-            // Create HTTP client
-            let client = reqwest::Client::new();
+            // push a value to the steps array at the position i
+            // collections.lessons
+            //     .update_one(
+            //         doc! { "_id": ObjectId::parse_str(id.clone()).unwrap() },
+            //         doc! {
+            //             "$push": {
+            //                 "steps": {
+            //                     "$each": [{
+            //                         "title": step_title,
+            //                         "explanation": step_prompt_content,
+            //                         "image": Option::<String>::None,
+            //                         "tts": Option::<String>::None,
+            //                         "references": Array::new(),
+            //                     }],
+            //                     "$position": i as i32
+            //                 }
+            //             }
+            //         }
+            //     ).await
+            //     .expect("Failed to update lesson with new step");
 
-            // Generate image with DALL-E
+            // Create HTTP client
+
             let image_response = match
                 client
                     .post("https://api.openai.com/v1/images/generations")
@@ -228,7 +265,7 @@ pub async fn start_lesson_pipeline(
                     .json(
                         &json!({
                     "model": "gpt-image-1",
-                    "prompt": step_prompt_content,
+                    "prompt": format!("Dada la siguiente explicación, genera una imagen que represente visualmente el contenido de forma clara y coherente. Asegúrate de que la imagen esté relacionada directamente con el tema descrito. Explicación: {}", step_prompt_content),
                     "n": 1,
                     "size": "1024x1024",
                     "quality": "low",
@@ -263,78 +300,9 @@ pub async fn start_lesson_pipeline(
 
             image_b64 = "data:image/png;base64,".to_string() + &image_b64;
             // Generate explanation using original model
-            let client = reqwest::Client::new();
-            let request_body =
-                json!({
-    "model": "google/gemini-2.5-flash-preview",
-    "messages": [{
-        "role": "user",
-        "content": [
-            {
-                "type": "text",
-                "text": "Explica el siguiente imagen sin titulo. Evita ser redundante. Devuelve el texto en español. No agregas estilos al texto como bold. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones. No usas newlines y haz el texto en un solo párrafo."
-            },
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": image_b64
-                }
-            }
-        ]
-    }],
-    "response_format": {
-        "type": "json_schema",
-        "json_schema": {
-            "name": "explanation",
-            "strict": true,
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "explanation": {"type": "string"}
-                },
-                "required": ["explanation"],
-                "additionalProperties": false
-            }
-        }
-    }
-});
 
-            let response = match
-                client
-                    .post("https://openrouter.ai/api/v1/chat/completions")
-                    .header(header::AUTHORIZATION, format!("Bearer {}", api_key))
-                    .json(&request_body)
-                    .send().await
-            {
-                Ok(r) => r,
-                Err(e) => {
-                    info!("Explanation request failed: {}", e);
-                    continue;
-                }
-            };
-
-            let response_json: serde_json::Value = match response.json().await {
-                Ok(j) => j,
-                Err(e) => {
-                    info!("Failed to parse explanation response: {}", e);
-                    continue;
-                }
-            };
-
-            let explanation = response_json["choices"][0]["message"]["content"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string();
-
-            let explanation_json: serde_json::Value = match
-                serde_json::from_str(&explanation.replace("```json", "").replace("```", ""))
-            {
-                Ok(v) => v,
-                Err(e) => {
-                    info!("Failed to parse explanation JSON: {}", e);
-                    continue;
-                }
-            };
+            // let explanation = generate_image_explanation(image_b64.clone(), api_key.clone()).await;
+            let explanation = step_prompt_content.to_string();
 
             // upload image to MongoDB
             let image_doc = Image {
@@ -347,13 +315,7 @@ pub async fn start_lesson_pipeline(
             }
             let image_id = image_result.unwrap().inserted_id.as_object_id().unwrap().to_string();
 
-            (
-                Some(image_id),
-                explanation_json["explanation"]
-                    .as_str()
-                    .unwrap_or("No explanation generated")
-                    .to_string(),
-            )
+            (Some(image_id), explanation)
         } else {
             // Text-based step
             let text_request = ChatCompletionRequest {
@@ -416,6 +378,38 @@ pub async fn start_lesson_pipeline(
 
             (None, text_json["explanation"].as_str().unwrap_or_default().to_string())
         };
+
+        // update step with image and explanation in mongoDB
+
+        info!(
+            "Updating lesson with step {}: image: {:?}, explanation: {}",
+            i + 1,
+            image,
+            explanation
+        );
+
+        // let result = collections.lessons.update_one(
+        //     doc! { "_id": ObjectId::parse_str(id.clone()).unwrap() },
+        //     doc! {
+        //             "$set": {
+        //                 format!("steps.{}.image", i): image.clone(),
+        //                 format!("steps.{}.explanation", i): explanation.clone(),
+        //             }
+        //         }
+        // ).await;
+        // if result.is_err() {
+        //     info!("Failed to update lesson with new step: {}", result.err().unwrap());
+        //     continue;
+        // }
+
+        let references = gather_references(
+            media_type,
+            &explanation,
+            &wikipedia_url,
+            image.as_ref(),
+            &client,
+            &chat_api
+        ).await;
         let tts_api_key = match std::env::var("ELEVENLABS_API_KEY") {
             Ok(k) => k,
             Err(e) => {
@@ -480,7 +474,18 @@ pub async fn start_lesson_pipeline(
             }
         };
 
-        // Update lesson with new step
+        // Update lesson with tts_id and references
+        // collections.lessons
+        //     .update_one(
+        //         doc! { "_id": ObjectId::parse_str(id.clone()).unwrap() },
+        //         doc! {
+        //             "$set": {
+        //                 format!("steps.{}.tts", i): tts_id.clone(),
+        //                 format!("steps.{}.references", i): references.clone(),
+        //             }
+        //         }
+        //     ).await
+        //     .expect("Failed to update lesson with new step");
         collections.lessons
             .update_one(
                 doc! { "_id": ObjectId::parse_str(id.clone()).unwrap() },
@@ -489,13 +494,14 @@ pub async fn start_lesson_pipeline(
                         "steps": {
                             "$each": [{
                                 "title": step_title,
-                                "image": if media_type == "image" { 
-                                    Some(image) 
-                                } else { 
-                                    None 
+                                "image": if media_type == "image" {
+                                    Some(image)
+                                } else {
+                                    None
                                 },
                                 "explanation": explanation,
                                 "tts": tts_id,
+                                "references": references,
                             }]
                         }
                     }
@@ -503,4 +509,352 @@ pub async fn start_lesson_pipeline(
             ).await
             .expect("Failed to update lesson with new step");
     }
+}
+
+async fn get_wikipedia_reference(
+    prompt: &str,
+    client: &ChatApi,
+    collections: &Collections,
+    lesson_id: &str
+) -> Option<String> {
+    let wiki_prompt =
+        format!("Dado el tema '{}', proporciona la URL más relevante de la página de Wikipedia en español. Devuelve un objeto JSON con un campo 'wikipedia_url'. Solo devuelve el objeto JSON.
+", prompt);
+
+    let request = ChatCompletionRequest {
+        model: "google/gemini-2.0-flash-lite-001".to_string(),
+        messages: vec![Message {
+            role: "user".to_string(),
+            content: wiki_prompt,
+            name: None,
+            tool_calls: None,
+        }],
+        response_format: serde_json
+            ::from_value(
+                json!({
+            "type": "json_schema",
+            "json_schema": {
+                "name": "wikipedia_ref",
+                "strict": true,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "wikipedia_url": {"type": "string"}
+                    },
+                    "required": ["wikipedia_url"],
+                    "additionalProperties": false
+                }
+            }
+        })
+            )
+            .ok(),
+        stream: Some(false),
+        tools: None,
+        provider: None,
+        models: None,
+        transforms: None,
+    };
+
+    let response = match client.chat_completion(request).await {
+        Ok(r) => r,
+        Err(_) => {
+            return None;
+        }
+    };
+
+    let raw_content = response.choices[0].message.content.replace("```json", "").replace("```", "");
+
+    let parsed: serde_json::Value = match serde_json::from_str(&raw_content) {
+        Ok(v) => v,
+        Err(_) => {
+            return None;
+        }
+    };
+
+    let url = parsed["wikipedia_url"].as_str()?.to_string();
+
+    // Update lesson with Wikipedia URL
+    collections.lessons
+        .update_one(
+            doc! { "_id": ObjectId::parse_str(lesson_id).unwrap() },
+            doc! { "$set": { "wikipedia_url": &url } }
+        ).await
+        .ok()?;
+
+    Some(url)
+}
+
+async fn get_wikipedia_images(url: &Option<String>) -> Option<Vec<String>> {
+    let page_title = url.as_ref()?.split('/').last()?;
+    let api_url =
+        format!("https://es.wikipedia.org/w/api.php?action=query&titles={}&prop=images&format=json", page_title);
+
+    let response: serde_json::Value = reqwest::Client
+        ::new()
+        .get(&api_url)
+        .send().await
+        .ok()?
+        .json().await
+        .ok()?;
+
+    response["query"]["pages"]
+        .as_object()?
+        .values()
+        .next()?
+        ["images"].as_array()?
+        .iter()
+        .filter_map(|v| v["title"].as_str())
+        .map(|s| s.trim_start_matches("File:").to_string())
+        .collect::<Vec<_>>()
+        .into()
+}
+
+fn is_relevant_image(image_name: String, step_title: &str) -> bool {
+    let binding = step_title.to_lowercase();
+    let binding = binding.split_whitespace().collect::<Vec<_>>();
+
+    image_name
+        .to_lowercase()
+        .split(&['_', '-'][..])
+        .any(|part| binding.iter().any(|term| part.contains(term)))
+        .into()
+}
+
+async fn get_image_url(image_name: &str) -> Option<String> {
+    let encoded = urlencoding::encode(image_name);
+    let api_url =
+        format!("https://es.wikipedia.org/w/api.php?action=query&titles=File:{}&prop=imageinfo&iiprop=url&format=json", encoded);
+
+    let response: serde_json::Value = reqwest::Client
+        ::new()
+        .get(&api_url)
+        .send().await
+        .ok()?
+        .json().await
+        .ok()?;
+
+    response["query"]["pages"]
+        .as_object()?
+        .values()
+        .next()?
+        ["imageinfo"].as_array()?
+        .first()?
+        ["url"].as_str()
+        .map(|s| s.to_string())
+}
+
+async fn generate_image_explanation(image_url: String, api_key: String) -> String {
+    let request_body =
+        json!({
+    "model": "google/gemini-2.5-flash-preview",
+    "messages": [{
+        "role": "user",
+        "content": [
+            {
+                "type": "text",
+                "text": "Explica el siguiente imagen sin titulo. Evita ser redundante. Devuelve el texto en español. No agregas estilos al texto como bold. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones. No usas newlines y haz el texto en un solo párrafo."
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_url
+                }
+            }
+        ]
+    }],
+    "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "explanation",
+            "strict": true,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "explanation": {"type": "string"}
+                },
+                "required": ["explanation"],
+                "additionalProperties": false
+            }
+        }
+    }
+});
+
+    let client = reqwest::Client::new();
+
+    let response = match
+        client
+            .post("https://openrouter.ai/api/v1/chat/completions")
+            .header(header::AUTHORIZATION, format!("Bearer {}", api_key))
+            .json(&request_body)
+            .send().await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            info!("Explanation request failed: {}", e);
+            return "".to_string();
+        }
+    };
+    let response_json: serde_json::Value = match response.json().await {
+        Ok(j) => j,
+        Err(e) => {
+            info!("Failed to parse explanation response: {}", e);
+            return "".to_string();
+        }
+    };
+
+    let explanation = response_json["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+
+    let explanation_json: serde_json::Value = match
+        serde_json::from_str(&explanation.replace("```json", "").replace("```", ""))
+    {
+        Ok(v) => v,
+        Err(e) => {
+            info!("Failed to parse explanation JSON: {}", e);
+            return "".to_string();
+        }
+    };
+    explanation_json["explanation"].as_str().unwrap_or("No explanation generated").to_string()
+}
+async fn gather_references(
+    media_type: &str,
+    explanation: &str,
+    wikipedia_url: &Option<String>,
+    image_url: Option<&String>,
+    http_client: &reqwest::Client,
+    chat_api: &ChatApi
+) -> Vec<String> {
+    let mut references = Vec::new();
+
+    match media_type {
+        "image" => {
+            if let Some(url) = image_url {
+                if url.starts_with("http") {
+                    references.push(url.to_string());
+                }
+            }
+        }
+        "text" => {
+            if let Some(url) = wikipedia_url {
+                if let Some(page_content) = fetch_wikipedia_content(url, http_client).await {
+                    let ai_references = analyze_content_with_ai(
+                        explanation.into(),
+                        page_content,
+                        chat_api
+                    ).await;
+                    references.extend(ai_references);
+                }
+            }
+        }
+        _ => {}
+    }
+
+    references
+}
+
+async fn fetch_wikipedia_content(url: &str, client: &reqwest::Client) -> Option<String> {
+    let page_title = url.split('/').last()?;
+    let api_url = format!("https://es.wikipedia.org/w/rest.php/v1/page/{}", page_title);
+
+    match client.get(&api_url).header("Accept", "application/json").send().await {
+        Ok(response) => {
+            let page_data: serde_json::Value = response.json().await.ok()?;
+            page_data["source"].as_str().map(|s| s.to_string())
+        }
+        Err(e) => {
+            info!("Wikipedia API failed: {}", e);
+            None
+        }
+    }
+}
+
+async fn analyze_content_with_ai(
+    explanation: String,
+    content: String,
+    client: &ChatApi
+) -> Vec<String> {
+    // Truncate content to fit model context window
+    let truncated = truncate_content(content, 10000);
+
+    let prompt = format!(
+        "Analiza este contenido de Wikipedia e identifica las referencias relevantes para la explicación. \
+Devuelve un objeto JSON con un arreglo 'references' que contenga URLs. Máximo 3 enlaces. Intenta no usar Wikipedia y enfoca en otros fuentes confiables. Sé preciso y evita duplicados. Explicación: {}, Contenido: {}",
+        explanation,
+        truncated
+    );
+
+    let request = ChatCompletionRequest {
+        model: "google/gemini-2.0-flash-lite-001".to_string(),
+        messages: vec![Message {
+            role: "user".to_string(),
+            content: prompt,
+            name: None,
+            tool_calls: None,
+        }],
+        response_format: serde_json
+            ::from_value(
+                json!({
+            "type": "json_schema",
+            "json_schema": {
+                "name": "references",
+                "strict": true,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "references": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        }
+                    },
+                    "required": ["references"],
+                    "additionalProperties": false
+                }
+            }
+        })
+            )
+            .ok(),
+        stream: Some(false),
+        tools: None,
+        provider: None,
+        models: None,
+        transforms: None,
+    };
+
+    match client.chat_completion(request).await {
+        Ok(response) => {
+            let raw = response.choices[0].message.content.replace("```json", "").replace("```", "");
+
+            serde_json
+                ::from_str::<serde_json::Value>(&raw)
+                .ok()
+                .and_then(|v|
+                    v["references"].as_array().map(|arr|
+                        arr
+                            .iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    )
+                )
+                .unwrap_or_default()
+        }
+        Err(e) => {
+            info!("AI reference analysis failed: {}", e);
+            Vec::new()
+        }
+    }
+}
+
+fn truncate_content(content: String, max_chars: usize) -> String {
+    let len = content
+        .char_indices()
+        .rev()
+        .nth(max_chars - 1)
+        .map_or(0, |(idx, _ch)| idx);
+    let trunicated = content
+        .clone()
+        .drain(0..len)
+        .for_each(|_| {});
+    return format!("{:?}", trunicated);
 }
