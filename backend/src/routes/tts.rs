@@ -1,4 +1,4 @@
-use std::{fmt::Binary, sync::Arc};
+use std::sync::Arc;
 
 use axum::{
     extract::Path,
