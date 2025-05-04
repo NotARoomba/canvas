@@ -9,27 +9,27 @@ interface CanvasProps {
 }
 
 export interface CanvasData {
-  _id: {
-    $oid: string;
+  _id?: {
+    $oid?: string;
   };
-  prompt: string;
-  difficulty: number;
-  title: string;
-  description: string;
-  outline: {
-    title: string;
-    media_type: "text" | "image";
-    prompt: string;
+  prompt?: string;
+  difficulty?: number;
+  title?: string;
+  description?: string;
+  outline?: {
+    title?: string;
+    media_type?: "text" | "image";
+    prompt?: string;
   }[];
-  steps: {
-    title: string;
-    image: string | null;
-    explanation: string;
-    speech: string;
-    tts: string;
-    references: string[];
+  steps?: {
+    title?: string;
+    image?: string | null;
+    explanation?: string;
+    speech?: string;
+    tts?: string;
+    references?: string[];
   }[];
-  wikipedia_url: string;
+  wikipedia_url?: string;
 }
 
 export function Canvas({ id }: CanvasProps) {
