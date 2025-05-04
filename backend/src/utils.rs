@@ -368,7 +368,7 @@ pub async fn start_lesson_pipeline(
                 messages: vec![Message {
                     role: "user".to_string(),
                     content: format!(
-                        "Explica siguiente paso y da el titulo y hazlo de acuerdo con el prompt y title: '{}' y '{}'. Evita ser redundante. Devuelve el texto en español. Usa markdown simple como listas/bulleted points o negritas. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones. No usas newlines y haz el texto corto y conciso. Para mostrar matematicas, usa KaTeX entre $.",
+                        "Explica siguiente paso y da el titulo y hazlo de acuerdo con el prompt y title: '{}' y '{}'. Evita ser redundante. Devuelve el texto en español. Usa markdown simple como listas/bulleted points o negritas. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones. No usas newlines y haz el texto corto y conciso. Para mostrar matematicas, usa KaTeX entre $. RECUERDE DEVOLVERLO COMO UN OBJECTO JSON CON UN CAMPO 'explanation' QUE CONTENGA EL EXPLICACION.",
                         step_title,
                         step_prompt_content
                     ),
@@ -416,7 +416,7 @@ pub async fn start_lesson_pipeline(
             let text_json: serde_json::Value = match serde_json::from_str(text_content) {
                 Ok(v) => v,
                 Err(e) => {
-                    info!("Failed to parse text JSON: {}", e);
+                    info!("Failed to parse text JSON: {}, TEXT: {}", e, text_content);
                     continue;
                 }
             };
