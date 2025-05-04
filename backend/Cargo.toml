@@ -27,6 +27,8 @@ tower = "0.5.1"
 openrouter = "0.1.0"
 openrouter_api = "0.1.4"
 anyhow = "1.0.98"
+tokio-util = "0.7.15"
+http-body-util = "0.1.3"
 
 [dependencies.mongodb]
 version = "3.2.3"

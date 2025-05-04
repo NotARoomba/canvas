@@ -42,6 +42,7 @@ async fn main() {
         )
         .nest("/lessons", routes::lessons::get_routes(Arc::clone(&collections)))
         .nest("/images", routes::images::get_routes(Arc::clone(&collections)))
+        .nest("/tts", routes::tts::get_routes(Arc::clone(&collections)))
         .layer(layer)
         .layer(cors);
 

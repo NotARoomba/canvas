@@ -77,6 +77,6 @@ impl Serialize for StatusCodes {
 //     pub tts: String,
 // }
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct Image {
+pub struct File {
     pub data: String,
 }

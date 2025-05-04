@@ -5,13 +5,16 @@ use serde_json::json;
 use socketioxide::SocketIo;
 use tracing::info;
 use std::env;
-use crate::types::{ Difficulty, Image };
+use crate::types::{ Difficulty, File };
+use mongodb::bson::Binary;
+use mongodb::bson::spec::BinarySubtype;
 
 #[derive(Debug, Clone)]
 pub struct Collections {
     // pub users: Collection<User>,
     pub lessons: Collection<Document>,
-    pub images: Collection<Image>,
+    pub images: Collection<File>,
+    pub tts: Collection<File>,
 }
 
 pub async fn init_database(_io: &SocketIo) -> Result<Collections, String> {
@@ -28,9 +31,12 @@ pub async fn init_database(_io: &SocketIo) -> Result<Collections, String> {
     ) as Collection<Document>;
     let images = canva_db.collection(
         env::var("IMAGE_COLLECTION").expect("IMAGE_COLLECTION must be set").as_str()
-    ) as Collection<Image>;
+    ) as Collection<File>;
+    let tts = canva_db.collection(
+        env::var("TTS_COLLECTION").expect("TTS_COLLECTION must be set").as_str()
+    ) as Collection<File>;
     info!("Connected to MongoDB!");
-    Ok(Collections { lessons, images })
+    Ok(Collections { lessons, images, tts })
 }
 
 //functions for pipeline
@@ -232,13 +238,13 @@ pub async fn start_lesson_pipeline(
             {
                 Ok(r) => r,
                 Err(e) => {
-                    info!("Image generation failed: {}", e);
+                    info!("File generation failed: {}", e);
                     continue;
                 }
             };
 
             // Parse image response
-            // info!("Image response: {:?}", image_response);
+            // info!("File response: {:?}", image_response);
             let image_json: serde_json::Value = match image_response.json().await {
                 Ok(j) => j,
                 Err(e) => {
@@ -331,7 +337,7 @@ pub async fn start_lesson_pipeline(
             };
 
             // upload image to MongoDB
-            let image_doc = Image {
+            let image_doc = File {
                 data: image_b64.clone(),
             };
             let image_result = collections.images.insert_one(image_doc).await;
@@ -355,7 +361,7 @@ pub async fn start_lesson_pipeline(
                 messages: vec![Message {
                     role: "user".to_string(),
                     content: format!(
-                        "Explica siguiente paso y da el titulo y hazlo de acuerdo con el prompt y title: '{}' y '{}'. Evita ser redundante. Devuelve el texto en español. No agregas estilos al texto como bold. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones.",
+                        "Explica siguiente paso y da el titulo y hazlo de acuerdo con el prompt y title: '{}' y '{}'. Evita ser redundante. Devuelve el texto en español. No agregas estilos al texto como bold. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones. No usas newlines y haz el texto en un solo párrafo.",
                         step_title,
                         step_prompt_content
                     ),
@@ -410,6 +416,69 @@ pub async fn start_lesson_pipeline(
 
             (None, text_json["explanation"].as_str().unwrap_or_default().to_string())
         };
+        let tts_api_key = match std::env::var("ELEVENLABS_API_KEY") {
+            Ok(k) => k,
+            Err(e) => {
+                info!("Failed to load ELEVEN LABS API key: {}", e);
+                return;
+            }
+        };
+        let tts_id = {
+            // Generate TTS audio for text steps
+            let tts_response = reqwest::Client
+                ::new()
+                .post(format!("https://api.elevenlabs.io/v1/text-to-speech/86V9x9hrQds83qf7zaGn"))
+                .query(
+                    &[
+                        ("optimize_streaming_latsency", "0"),
+                        ("output_format", "mp3_22050_32"),
+                    ]
+                )
+                .header("xi-api-key", &tts_api_key)
+                .json(
+                    &json!({
+            "text": &explanation,
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.75,
+                "style": 0
+            },
+            "model_id": "eleven_flash_v2_5"
+        })
+                )
+                .send().await;
+
+            match tts_response {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        let audio_data = response.bytes().await.unwrap_or_default();
+
+                        match
+                            collections.tts.insert_one(File {
+                                data: (Binary {
+                                    subtype: BinarySubtype::Generic,
+                                    bytes: audio_data.to_vec(),
+                                }).to_string(),
+                            }).await
+                        {
+                            Ok(result) =>
+                                Some(result.inserted_id.as_object_id().unwrap().to_string()),
+                            Err(e) => {
+                                info!("Failed to insert TTS audio: {}", e);
+                                None
+                            }
+                        }
+                    } else {
+                        info!("TTS API request failed with status: {}", response.status());
+                        None
+                    }
+                }
+                Err(e) => {
+                    info!("TTS request failed: {}", e);
+                    None
+                }
+            }
+        };
 
         // Update lesson with new step
         collections.lessons
@@ -425,7 +494,8 @@ pub async fn start_lesson_pipeline(
                                 } else { 
                                     None 
                                 },
-                                "explanation": explanation
+                                "explanation": explanation,
+                                "tts": tts_id,
                             }]
                         }
                     }
