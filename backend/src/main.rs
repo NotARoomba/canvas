@@ -41,6 +41,7 @@ async fn main() {
             get(|| async { "You're not supposed to be here!" })
         )
         .nest("/lessons", routes::lessons::get_routes(Arc::clone(&collections)))
+        .nest("/images", routes::images::get_routes(Arc::clone(&collections)))
         .layer(layer)
         .layer(cors);
 

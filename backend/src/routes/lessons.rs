@@ -10,8 +10,6 @@ use axum::{
 use mongodb::bson::{doc, oid::ObjectId, Array};
 use serde_json::json;
 use tokio::task;
-use tracing::info;
-
 use crate::{ types::{ Difficulty, Lesson, StatusCodes }, utils::{start_lesson_pipeline, Collections} };
 
 pub async fn start(

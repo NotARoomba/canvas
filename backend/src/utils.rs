@@ -5,12 +5,13 @@ use serde_json::json;
 use socketioxide::SocketIo;
 use tracing::info;
 use std::env;
-use crate::types::Difficulty;
+use crate::types::{ Difficulty, Image };
 
 #[derive(Debug, Clone)]
 pub struct Collections {
     // pub users: Collection<User>,
     pub lessons: Collection<Document>,
+    pub images: Collection<Image>,
 }
 
 pub async fn init_database(_io: &SocketIo) -> Result<Collections, String> {
@@ -25,8 +26,11 @@ pub async fn init_database(_io: &SocketIo) -> Result<Collections, String> {
     let lessons = canva_db.collection(
         env::var("LESSON_COLLECTION").expect("LESSON_COLLECTION must be set").as_str()
     ) as Collection<Document>;
+    let images = canva_db.collection(
+        env::var("IMAGE_COLLECTION").expect("IMAGE_COLLECTION must be set").as_str()
+    ) as Collection<Image>;
     info!("Connected to MongoDB!");
-    Ok(Collections { lessons })
+    Ok(Collections { lessons, images })
 }
 
 //functions for pipeline
@@ -64,6 +68,7 @@ pub async fn start_lesson_pipeline(
         - 'title': título general de la lección \
         - 'description': descripción breve de la lección \
         - 'outline': array de objetos, cada uno con 'title' (título del paso), 'media_type' (media que va a generar, los opciones son ['text', 'image'], y 'prompt' (instrucción para explicar el paso o generar el imagen). \
+        Si vas a poner un imagen, el 'prompt' debe ser una pregunta o instrucción que se puede responder con una imagen y si incluye texto, debe estar claro en el prompt que texto debe poner o especificar que no va a haber texto. \
         La información debe adaptarse al nivel educativo: primaria con pasos simples y mas imagenes, universitario con pasos detallados. \
         Evita redundancias. Texto en español sin formato. Solo JSON sin otros textos.",
         prompt,
@@ -325,8 +330,19 @@ pub async fn start_lesson_pipeline(
                 }
             };
 
+            // upload image to MongoDB
+            let image_doc = Image {
+                data: image_b64.clone(),
+            };
+            let image_result = collections.images.insert_one(image_doc).await;
+            if image_result.is_err() {
+                info!("Failed to upload image to MongoDB: {}", image_result.err().unwrap());
+                continue;
+            }
+            let image_id = image_result.unwrap().inserted_id.as_object_id().unwrap().to_string();
+
             (
-                Some(image_b64),
+                Some(image_id),
                 explanation_json["explanation"]
                     .as_str()
                     .unwrap_or("No explanation generated")

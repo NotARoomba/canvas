@@ -70,9 +70,13 @@ impl Serialize for StatusCodes {
     }
 }
 
-pub struct Step {
-    pub title: String,
-    pub explanation: String,
-    pub image: Option<String>,
-    pub tts: String,
+// pub struct Step {
+//     pub title: String,
+//     pub explanation: String,
+//     pub image: Option<String>,
+//     pub tts: String,
+// }
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct Image {
+    pub data: String,
 }
