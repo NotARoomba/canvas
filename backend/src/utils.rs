@@ -368,7 +368,7 @@ pub async fn start_lesson_pipeline(
                 messages: vec![Message {
                     role: "user".to_string(),
                     content: format!(
-                        "Explica siguiente paso y da el titulo y hazlo de acuerdo con el prompt y title: '{}' y '{}'. Evita ser redundante. Devuelve el texto en español. Usa markdown simple como listas/bulleted points o negritas. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones. No usas newlines y haz el texto corto y conciso. Para mostrar matematicas, usa KaTeX entre $. RECUERDE DEVOLVERLO COMO UN OBJECTO JSON CON UN CAMPO 'explanation' QUE CONTENGA EL EXPLICACION., No usas double quotes, y si tienes que usarlos, escapealos.",
+                        "Explica siguiente paso y da el titulo y hazlo de acuerdo con el prompt y title: '{}' y '{}'. Evita ser redundante. Devuelve el texto en español. Usa markdown simple como listas/bulleted points o negritas. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones. No usas newlines y haz el texto corto y conciso. Para mostrar matematicas, usa KaTeX entre $. RECUERDE DEVOLVERLO COMO UN OBJECTO JSON CON UN CAMPO 'explanation' QUE CONTENGA EL EXPLICACION., No usas double quotes, y si tienes que usarlos, escapealos. Si tienes que usar un backslash, incluso con el KaTeX, escapealo.",
                         step_title,
                         step_prompt_content
                     ),
