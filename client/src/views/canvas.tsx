@@ -47,28 +47,25 @@ export function Canvas({ id }: CanvasProps) {
 
   //   }
   // );
-  const [data, setData] = useState<{ lesson: CanvasData } | null>(null);
+  const [data, setData] = useState<CanvasData | null>(null);
 
   useEffect(() => {
     const socket = io("ws://localhost:3001/");
-    socket.on("request_lesson_data", (data: any) => {
-      console.log("request_lesson_data", data);
-    });
 
     socket.on("update_lesson_data", (data) => {
       console.log("update_lesson_data", data);
       if (!data)
         socket.emit("request_lesson_data", id, (res: any) => {
-          setData({ lesson: res });
+          setData(res);
         });
       else {
-        setData({ lesson: data });
+        setData(data);
       }
     });
     return () => {
       socket.close();
     };
-  }, []);
+  }, [data]);
 
   if (!data) {
     return (
@@ -78,7 +75,7 @@ export function Canvas({ id }: CanvasProps) {
     );
   }
 
-  if (!data.lesson) {
+  if (!data) {
     return (
       <div className="flex h-screen w-screen items-center justify-center p-4">
         <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-white rounded-2xl p-4">
@@ -94,5 +91,5 @@ export function Canvas({ id }: CanvasProps) {
     );
   }
 
-  return <Info lesson={data.lesson} />;
+  return <Info lesson={data} />;
 }

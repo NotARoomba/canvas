@@ -71,7 +71,7 @@ pub async fn init_database(io: &SocketIo) -> Result<Collections, String> {
                     .expect("Failed to get full document");
                 let oid = updated_doc.get_object_id("_id").unwrap().to_string();
                 info!("Lesson updated: {}", oid);
-                let _ = io.to(oid).emit(WebSocketEvents::UpdateLessonData, &updated_doc.clone());
+                let _ = io.to([oid]).emit(WebSocketEvents::UpdateLessonData, &updated_doc.clone());
             }
         }
     });
