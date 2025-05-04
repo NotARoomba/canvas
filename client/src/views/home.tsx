@@ -48,8 +48,8 @@ export default function Home() {
   }
 
   return (
-    <main className="flex min-h-screen w-screen flex-col items-center justify-start gap-8 sm:gap-16 md:gap-24 lg:gap-32 px-4 sm:px-6 md:px-8 pt-40 sm:pt-48 md:pt-56 pb-12 sm:pb-16 md:pb-24">
-      <section className="w-full flex flex-col items-center gap-6 sm:gap-8 md:gap-12">
+    <main className="flex min-h-screen w-screen flex-col items-center justify-center gap-8 sm:gap-16 md:gap-24 lg:gap-32 px-4 sm:px-6 md:px-8">
+      <section className="w-full max-w-3xl mx-auto flex flex-col items-center gap-6 sm:gap-8 md:gap-12">
         <motion.h1
           className="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-800 text-center"
           initial={{ opacity: 0, y: 20 }}
