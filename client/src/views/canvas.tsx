@@ -33,7 +33,7 @@ export interface CanvasData {
 
 export function Canvas({ id }: CanvasProps) {
   const { data } = useSWR<{ lesson: CanvasData }>(
-    `https://canvas.notaroomba.dev/lessons/${id}`,
+    `http://canvas.notaroomba.dev/lessons/${id}`,
     fetcher,
     {
       refreshInterval: 2 * 1000,

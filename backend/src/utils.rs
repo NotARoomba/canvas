@@ -1,3 +1,4 @@
+use base64::{ encode, engine::{ self, general_purpose, GeneralPurpose }, Engine };
 use futures::StreamExt;
 use mongodb::{
     bson::{ doc, oid::ObjectId, Document },
@@ -190,7 +191,7 @@ pub async fn start_lesson_pipeline(
     let raw_content = &response.choices[0].message.content
         .replace("```json", "")
         .replace("```", "");
-    info!("Raw outline response: {}", raw_content);
+    // info!("Raw outline response: {}", raw_content);
 
     let parsed_json: serde_json::Value = match serde_json::from_str(raw_content) {
         Ok(v) => v,
@@ -256,29 +257,79 @@ pub async fn start_lesson_pipeline(
             .get("speech")
             .and_then(|v| v.as_str())
             .unwrap_or_default();
-
+        info!("Wikipedia Images: {:?}", wikipedia_images);
         let (image, explanation) = if media_type == "image" {
+            let mut res = None;
             if let Some(images) = wikipedia_images.clone() {
                 for image in images {
-                    if is_relevant_image(image.clone(), step_title) {
-                        if let Some(image_url) = get_image_url(&image).await {
-                            let explanation = generate_image_explanation(
-                                image_url.clone(),
-                                api_key.clone()
-                            ).await;
-                            (Some(image_url), explanation);
+                    // if is_relevant_image(image.clone(), step_title) {
+                    if let Some(image_url) = get_image_url(&image).await {
+                        let explanation = generate_image_explanation(
+                            image_url.clone(),
+                            api_key.clone()
+                        ).await;
+                        info!("Image URL: {}", image_url);
+                        // download the image as base64 and then store it in MongoDB
+                        let image_response = match client.get(&image_url).send().await {
+                            Ok(r) => r,
+                            Err(e) => {
+                                info!("Image download failed: {}", e);
+                                continue;
+                            }
+                        };
+                        let image_data = match image_response.bytes().await {
+                            Ok(data) => data,
+                            Err(e) => {
+                                info!("Failed to read image data: {}", e);
+                                continue;
+                            }
+                        };
+
+                        // Encode image data to string
+                        let image_data = general_purpose::STANDARD.encode(&image_data);
+
+                        info!("First 50 chars of image data: {:?}", &image_data[0..50]);
+
+                        let image_b64 = format!(
+                            "data:image/{};base64,{}",
+                            image_url.rsplit(".").next().unwrap_or("png"),
+                            &image_data
+                        );
+
+                        let explanation = step_prompt_content.to_string();
+
+                        // upload image to MongoDB
+                        let image_doc = Image {
+                            data: image_b64.clone(),
+                        };
+                        let image_result = collections.images.insert_one(image_doc).await;
+                        if image_result.is_err() {
+                            info!(
+                                "Failed to upload image to MongoDB: {}",
+                                image_result.err().unwrap()
+                            );
+                            continue;
                         }
+                        let image_id = image_result
+                            .unwrap()
+                            .inserted_id.as_object_id()
+                            .unwrap()
+                            .to_string();
+
+                        res = Some((Some(image_id), explanation));
+                        break;
                     }
                 }
+                // }
             }
             // Get OpenAI API key
-            let openai_key = match std::env::var("OPENAI_API_KEY") {
-                Ok(k) => k,
-                Err(_) => {
-                    info!("Missing OPENAI_API_KEY environment variable");
-                    continue;
-                }
-            };
+            // let openai_key = match std::env::var("OPENAI_API_KEY") {
+            //     Ok(k) => k,
+            //     Err(_) => {
+            //         info!("Missing OPENAI_API_KEY environment variable");
+            //         continue;
+            //     }
+            // };
 
             // push a value to the steps array at the position i
             // collections.lessons
@@ -303,64 +354,67 @@ pub async fn start_lesson_pipeline(
 
             // Create HTTP client
 
-            let image_response = match
-                client
-                    .post("https://api.openai.com/v1/images/generations")
-                    .header(header::AUTHORIZATION, format!("Bearer {}", openai_key))
-                    .json(
-                        &json!({
-                    "model": "gpt-image-1",
-                    "prompt": format!("Dada la siguiente explicación, genera una imagen que represente visualmente el contenido de forma clara y coherente. Asegúrate de que la imagen esté relacionada directamente con el tema descrito. Explicación: {}", step_prompt_content),
-                    "n": 1,
-                    "size": "1024x1024",
-                    "quality": "low",
-                })
-                    )
-                    .send().await
-            {
-                Ok(r) => r,
-                Err(e) => {
-                    info!("File generation failed: {}", e);
-                    continue;
-                }
-            };
+            // let image_response = match
+            //     client
+            //         .post("https://api.openai.com/v1/images/generations")
+            //         .header(header::AUTHORIZATION, format!("Bearer {}", openai_key))
+            //         .json(
+            //             &json!({
+            //         "model": "gpt-image-1",
+            //         "prompt": format!("Dada la siguiente explicación, genera una imagen que represente visualmente el contenido de forma clara y coherente. Asegúrate de que la imagen esté relacionada directamente con el tema descrito. Explicación: {}", step_prompt_content),
+            //         "n": 1,
+            //         "size": "1024x1024",
+            //         "quality": "low",
+            //     })
+            //         )
+            //         .send().await
+            // {
+            //     Ok(r) => r,
+            //     Err(e) => {
+            //         info!("File generation failed: {}", e);
+            //         continue;
+            //     }
+            // };
 
-            // Parse image response
-            // info!("File response: {:?}", image_response);
-            let image_json: serde_json::Value = match image_response.json().await {
-                Ok(j) => j,
-                Err(e) => {
-                    info!("Failed to parse image response: {}", e);
-                    continue;
-                }
-            };
+            // // Parse image response
+            // // info!("File response: {:?}", image_response);
+            // let image_json: serde_json::Value = match image_response.json().await {
+            //     Ok(j) => j,
+            //     Err(e) => {
+            //         info!("Failed to parse image response: {}", e);
+            //         continue;
+            //     }
+            // };
 
-            let mut image_b64 = match image_json["data"][0]["b64_json"].as_str() {
-                Some(b64) => b64.to_string(),
-                None => {
-                    info!("Missing base64 image data");
-                    continue;
-                }
-            };
+            // let mut image_b64 = match image_json["data"][0]["b64_json"].as_str() {
+            //     Some(b64) => b64.to_string(),
+            //     None => {
+            //         info!("Missing base64 image data");
+            //         continue;
+            //     }
+            // };
 
-            image_b64 = "data:image/png;base64,".to_string() + &image_b64;
-            // Generate explanation using original model
+            // use reqwest to downloa the image
 
-            // let explanation = generate_image_explanation(image_b64.clone(), api_key.clone()).await;
-            let explanation = step_prompt_content.to_string();
+            // image_b64 = "data:image/png;base64,".to_string() + &image_b64;
+            // // Generate explanation using original model
 
-            // upload image to MongoDB
-            let image_doc = Image {
-                data: image_b64.clone(),
-            };
-            let image_result = collections.images.insert_one(image_doc).await;
-            if image_result.is_err() {
-                info!("Failed to upload image to MongoDB: {}", image_result.err().unwrap());
-                continue;
-            }
-            let image_id = image_result.unwrap().inserted_id.as_object_id().unwrap().to_string();
+            // // let explanation = generate_image_explanation(image_b64.clone(), api_key.clone()).await;
+            // let explanation = step_prompt_content.to_string();
 
-            (Some(image_id), explanation)
+            // // upload image to MongoDB
+            // let image_doc = Image {
+            //     data: image_b64.clone(),
+            // };
+            // let image_result = collections.images.insert_one(image_doc).await;
+            // if image_result.is_err() {
+            //     info!("Failed to upload image to MongoDB: {}", image_result.err().unwrap());
+            //     continue;
+            // }
+            // let image_id = image_result.unwrap().inserted_id.as_object_id().unwrap().to_string();
+
+            // (Some(image_id), explanation)
+            res.unwrap_or((None, speech.to_string()))
         } else {
             // Text-based step
             let text_request = ChatCompletionRequest {
@@ -368,7 +422,7 @@ pub async fn start_lesson_pipeline(
                 messages: vec![Message {
                     role: "user".to_string(),
                     content: format!(
-                        "Explica siguiente paso y da el titulo y hazlo de acuerdo con el prompt y title: '{}' y '{}'. Evita ser redundante. Devuelve el texto en español. Usa markdown simple como listas/bulleted points o negritas. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones. No usas newlines y haz el texto corto y conciso. Para mostrar matematicas, usa KaTeX entre $. RECUERDE DEVOLVERLO COMO UN OBJECTO JSON CON UN CAMPO 'explanation' QUE CONTENGA EL EXPLICACION., No usas double quotes, y si tienes que usarlos, escapealos. Si tienes que usar un backslash, incluso con el KaTeX, escapealo.",
+                        "Explica siguiente paso y da el titulo y hazlo de acuerdo con el prompt y title: '{}' y '{}'. Evita ser redundante. Devuelve el texto en español. Usa markdown simple como listas/bulleted points o negritas. Devuélvelo como un objeto JSON con un campo de 'explanation' que contenga el explicacion. No incluyas ningún otro texto ni explicaciones. No usas newlines y haz el texto corto y conciso. Para mostrar matematicas, usa KaTeX entre $. RECUERDE DEVOLVERLO COMO UN OBJECTO JSON CON UN CAMPO 'explanation' QUE CONTENGA EL EXPLICACION., No usas double quotes, y si tienes que usarlos, escapealos. Si tienes que usar un backslash, incluso con el KaTeX, escapealo. No pones newlines sino \\n",
                         step_title,
                         step_prompt_content
                     ),
@@ -427,12 +481,12 @@ pub async fn start_lesson_pipeline(
 
         // update step with image and explanation in mongoDB
 
-        info!(
-            "Updating lesson with step {}: image: {:?}, explanation: {}",
-            i + 1,
-            image,
-            explanation
-        );
+        // info!(
+        //     "Updating lesson with step {}: image: {:?}, explanation: {}",
+        //     i + 1,
+        //     image,
+        //     explanation
+        // );
 
         // let result = collections.lessons.update_one(
         //     doc! { "_id": ObjectId::parse_str(id.clone()).unwrap() },
@@ -456,69 +510,70 @@ pub async fn start_lesson_pipeline(
             &client,
             &chat_api
         ).await;
-        let tts_api_key = match std::env::var("ELEVENLABS_API_KEY") {
-            Ok(k) => k,
-            Err(e) => {
-                info!("Failed to load ELEVEN LABS API key: {}", e);
-                return;
-            }
-        };
-        let tts_id = {
-            // Generate TTS audio for text steps
-            let tts_response = reqwest::Client
-                ::new()
-                .post(format!("https://api.elevenlabs.io/v1/text-to-speech/86V9x9hrQds83qf7zaGn"))
-                .query(
-                    &[
-                        ("optimize_streaming_latsency", "0"),
-                        ("output_format", "mp3_22050_32"),
-                    ]
-                )
-                .header("xi-api-key", &tts_api_key)
-                .json(
-                    &json!({
-            "text": speech,
-            "voice_settings": {
-                "stability": 0.5,
-                "similarity_boost": 0.75,
-                "style": 0
-            },
-            "model_id": "eleven_flash_v2_5"
-        })
-                )
-                .send().await;
+        let tts_id = "";
+        // let tts_api_key = match std::env::var("ELEVENLABS_API_KEY") {
+        //     Ok(k) => k,
+        //     Err(e) => {
+        //         info!("Failed to load ELEVEN LABS API key: {}", e);
+        //         return;
+        //     }
+        // };
+        // let tts_id = {
+        //     // Generate TTS audio for text steps
+        //     let tts_response = reqwest::Client
+        //         ::new()
+        //         .post(format!("https://api.elevenlabs.io/v1/text-to-speech/86V9x9hrQds83qf7zaGn"))
+        //         .query(
+        //             &[
+        //                 ("optimize_streaming_latsency", "0"),
+        //                 ("output_format", "mp3_22050_32"),
+        //             ]
+        //         )
+        //         .header("xi-api-key", &tts_api_key)
+        //         .json(
+        //             &json!({
+        //     "text": speech,
+        //     "voice_settings": {
+        //         "stability": 0.5,
+        //         "similarity_boost": 0.75,
+        //         "style": 0
+        //     },
+        //     "model_id": "eleven_flash_v2_5"
+        // })
+        //         )
+        //         .send().await;
 
-            match tts_response {
-                Ok(response) => {
-                    if response.status().is_success() {
-                        let audio_data = response.bytes().await.unwrap_or_default();
+        //     match tts_response {
+        //         Ok(response) => {
+        //             if response.status().is_success() {
+        //                 let audio_data = response.bytes().await.unwrap_or_default();
 
-                        match
-                            collections.tts.insert_one(TTS {
-                                data: (Binary {
-                                    subtype: BinarySubtype::Generic,
-                                    bytes: audio_data.to_vec(),
-                                }).bytes,
-                            }).await
-                        {
-                            Ok(result) =>
-                                Some(result.inserted_id.as_object_id().unwrap().to_string()),
-                            Err(e) => {
-                                info!("Failed to insert TTS audio: {}", e);
-                                None
-                            }
-                        }
-                    } else {
-                        info!("TTS API request failed with status: {}", response.status());
-                        None
-                    }
-                }
-                Err(e) => {
-                    info!("TTS request failed: {}", e);
-                    None
-                }
-            }
-        };
+        //                 match
+        //                     collections.tts.insert_one(TTS {
+        //                         data: (Binary {
+        //                             subtype: BinarySubtype::Generic,
+        //                             bytes: audio_data.to_vec(),
+        //                         }).bytes,
+        //                     }).await
+        //                 {
+        //                     Ok(result) =>
+        //                         Some(result.inserted_id.as_object_id().unwrap().to_string()),
+        //                     Err(e) => {
+        //                         info!("Failed to insert TTS audio: {}", e);
+        //                         None
+        //                     }
+        //                 }
+        //             } else {
+        //                 info!("TTS API request failed with status: {}", response.status());
+        //                 None
+        //             }
+        //         }
+        //         Err(e) => {
+        //             info!("TTS request failed: {}", e);
+        //             None
+        //         }
+        //     }
+        // };
 
         // Update lesson with tts_id and references
         // collections.lessons
@@ -670,7 +725,7 @@ fn is_relevant_image(image_name: String, step_title: &str) -> bool {
 async fn get_image_url(image_name: &str) -> Option<String> {
     let encoded = urlencoding::encode(image_name);
     let api_url =
-        format!("https://es.wikipedia.org/w/api.php?action=query&titles=File:{}&prop=imageinfo&iiprop=url&format=json", encoded);
+        format!("https://es.wikipedia.org/w/api.php?action=query&titles={}&prop=imageinfo&iiprop=url&format=json", encoded);
 
     let response: serde_json::Value = reqwest::Client
         ::new()
@@ -679,7 +734,7 @@ async fn get_image_url(image_name: &str) -> Option<String> {
         .ok()?
         .json().await
         .ok()?;
-
+    info!("Image URL response: {:?}", response);
     response["query"]["pages"]
         .as_object()?
         .values()

@@ -2,7 +2,14 @@ import { CanvasData } from "@/views/canvas";
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Volume2, VolumeX, Play, Pause } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Volume2,
+  VolumeX,
+  Play,
+  Pause,
+} from "lucide-react";
 import { Markdown } from "@/components/ui/markdown";
 
 interface BoardProps {
@@ -16,29 +23,34 @@ export function Board({ lesson }: BoardProps) {
 
   const steps = lesson.steps || [];
 
-  const playAudio = useCallback(async (index: number) => {
-    if (index >= 0 && index < steps.length && steps[index].tts) {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-      
-      const audio = new Audio(`https://canvas.notaroomba.dev/tts/${steps[index].tts}`);
-      audioRef.current = audio;
-      
-      audio.addEventListener('ended', () => {
-        setIsPlaying(false);
-        // Move to next step when audio ends
-        if (index < steps.length - 1) {
-          const nextStep = index + 1;
-          handleStepTransition(nextStep);
-          playAudio(nextStep);
+  const playAudio = useCallback(
+    async (index: number) => {
+      if (index >= 0 && index < steps.length && steps[index].tts) {
+        if (audioRef.current) {
+          audioRef.current.pause();
         }
-      });
 
-      setIsPlaying(true);
-      await audio.play();
-    }
-  }, [steps]);
+        const audio = new Audio(
+          `https://canvas.notaroomba.dev/tts/${steps[index].tts}`
+        );
+        audioRef.current = audio;
+
+        audio.addEventListener("ended", () => {
+          setIsPlaying(false);
+          // Move to next step when audio ends
+          if (index < steps.length - 1) {
+            const nextStep = index + 1;
+            handleStepTransition(nextStep);
+            playAudio(nextStep);
+          }
+        });
+
+        setIsPlaying(true);
+        await audio.play();
+      }
+    },
+    [steps]
+  );
 
   const handleStepTransition = useCallback((index: number) => {
     setCurrentStep(index);
@@ -85,8 +97,8 @@ export function Board({ lesson }: BoardProps) {
             <p className="text-3xl text-muted-foreground max-w-4xl">
               <Markdown>{lesson.description || ""}</Markdown>
             </p>
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
               className="mt-12"
               onClick={() => {
                 handleStepTransition(0);
@@ -123,32 +135,37 @@ export function Board({ lesson }: BoardProps) {
                     {steps[currentStep]?.image && (
                       <div className="relative aspect-video rounded-lg overflow-hidden bg-muted">
                         <img
-                          src={`https://canvas.notaroomba.dev/images/${steps[currentStep].image}`}
+                          src={`http://localhost:3001/images/${steps[currentStep].image}`}
                           alt={steps[currentStep].title || "Step illustration"}
                           className="absolute inset-0 w-full h-full object-cover"
                         />
                       </div>
                     )}
                     <div className="prose prose-lg prose-neutral dark:prose-invert max-w-none">
-                      <Markdown>{steps[currentStep]?.explanation || ""}</Markdown>
+                      <Markdown>
+                        {steps[currentStep]?.explanation || ""}
+                      </Markdown>
                     </div>
 
                     {/* References */}
-                    {steps[currentStep]?.references && steps[currentStep].references.length > 0 && (
-                      <div className="mt-auto pt-8 border-t">
-                        <h3 className="text-sm font-medium text-muted-foreground mb-2">Referencias</h3>
-                        <div className="flex flex-col gap-1.5">
-                          {steps[currentStep].references.map((ref, index) => (
-                            <div
-                              key={index}
-                              className="text-sm text-muted-foreground font-mono"
-                            >
-                              {ref}
-                            </div>
-                          ))}
+                    {steps[currentStep]?.references &&
+                      steps[currentStep].references.length > 0 && (
+                        <div className="mt-auto pt-8 border-t">
+                          <h3 className="text-sm font-medium text-muted-foreground mb-2">
+                            Referencias
+                          </h3>
+                          <div className="flex flex-col gap-1.5">
+                            {steps[currentStep].references.map((ref, index) => (
+                              <div
+                                key={index}
+                                className="text-sm text-muted-foreground font-mono"
+                              >
+                                {ref}
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
                   </div>
                 </div>
               </div>
@@ -211,11 +228,7 @@ export function Board({ lesson }: BoardProps) {
             </Button>
 
             {steps[currentStep].tts && (
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={toggleAudio}
-              >
+              <Button variant="outline" size="icon" onClick={toggleAudio}>
                 {isPlaying ? (
                   <VolumeX className="h-4 w-4" />
                 ) : (

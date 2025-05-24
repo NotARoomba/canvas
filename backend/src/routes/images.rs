@@ -1,9 +1,17 @@
 use std::sync::Arc;
 
-use axum::{ extract::Path, response::{ IntoResponse, Response }, routing::get, Json, Router };
+use axum::{
+    body::Body,
+    extract::Path,
+    response::{ IntoResponse, Response },
+    routing::get,
+    Json,
+    Router,
+};
 use base64::{ engine::general_purpose, Engine };
 use mongodb::bson::{ doc, oid::ObjectId };
 use serde_json::json;
+use tracing::info;
 // use tracing::info;
 use crate::{ types::StatusCodes, utils::Collections };
 
@@ -17,18 +25,37 @@ pub async fn get_image(Path(id): Path<String>, collections: &Collections) -> Res
     match image.clone() {
         Some(image) => {
             // send raw image with headers
-            let data = general_purpose::STANDARD
-                .decode(image.data.replace("data:image/png;base64,", "").as_bytes())
-                .unwrap();
-            let response = axum::response::Response
-                ::builder()
-                .header("Content-Type", "image/png")
-                .header("Content-Length", data.len())
-                .body(axum::body::Body::from(data))
-                .unwrap();
-            return response;
+            let base64_data = &image.data;
+            if let Some((mime_part, base64_part)) = base64_data.split_once(",") {
+                // Extract MIME type from "data:image/png;base64"
+                let mime_type = mime_part
+                    .strip_prefix("data:")
+                    .and_then(|s| s.split_once(";"))
+                    .map(|(mime, _)| mime)
+                    .unwrap_or("application/octet-stream"); // fallback
+                info!("MIME type: {}", mime_type);
+                // Decode the base64 data
+                let decoded_data = general_purpose::STANDARD
+                    .decode(base64_part.as_bytes())
+                    .unwrap();
+
+                // Build the HTTP response with dynamic Content-Type
+                let response = Response::builder()
+                    .header("Content-Type", mime_type)
+                    .header("Content-Disposition", "inline")
+                    .header("Content-Length", decoded_data.len())
+                    .body(axum::body::Body::from(decoded_data))
+                    .unwrap();
+
+                // Now `response` is ready to be returned
+                return response;
+            } else {
+                // Handle invalid data URI case
+                // e.g., return an error response
+                return Json(json!({"status": StatusCodes::GenericError})).into_response();
+            }
         }
-        None => Json(json!({"status": StatusCodes::LessonNotFound})).into_response(),
+        None => Json(json!({"status": StatusCodes::GenericError})).into_response(),
     }
 }
 

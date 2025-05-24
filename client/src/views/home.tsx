@@ -22,16 +22,13 @@ export default function Home() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(
-        "https://canvas.notaroomba.dev/lessons/start",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ prompt, difficulty: educationLevel }),
-        }
-      );
+      const response = await fetch("https://localhost:3001/lessons/start", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt, difficulty: educationLevel }),
+      });
 
       if (!response.ok) {
         throw new Error("Failed to generate content");
